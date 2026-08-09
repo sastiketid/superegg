@@ -38,9 +38,16 @@ function doPost(e) {
       if (result && result.success) {
         const cache = CacheService.getScriptCache();
         cache.remove('super_eggo_map_cache');
-        // Hapus juga cache rute sales spesifik jika ada
-        if (payload.sales) cache.remove('routing_cache_' + String(payload.sales).toLowerCase().trim());
-        if (payload.pic) cache.remove('routing_cache_' + String(payload.pic).toLowerCase().trim());
+        cache.remove('super_eggo_sales_list');
+        // Hapus juga cache rute & cache daftar toko sales spesifik jika ada
+        if (payload.sales) {
+          cache.remove('routing_cache_' + String(payload.sales).toLowerCase().trim());
+          cache.remove('stores_cache_' + String(payload.sales).toLowerCase().trim());
+        }
+        if (payload.pic) {
+          cache.remove('routing_cache_' + String(payload.pic).toLowerCase().trim());
+          cache.remove('stores_cache_' + String(payload.pic).toLowerCase().trim());
+        }
       }
     } else {
       return respondJSON({ success: false, message: "Action API tidak dikenal." });
@@ -61,11 +68,10 @@ function respondJSON(obj) {
 }
 
 function getSheetByGid(ss, gid) {
-  const sheets = ss.getSheets();
-  for (let i = 0; i < sheets.length; i++) {
-    if (sheets[i].getSheetId() == gid) return sheets[i];
-  }
-  return null;
+  // OPTIMASI: pakai method native getSheetById() (setara persis dengan loop manual
+  // di atas -> sama-sama cari sheet lewat gid, null kalau tak ketemu) tanpa perlu
+  // narik daftar semua sheet dulu.
+  return ss.getSheetById(gid);
 }
 
 // ==========================================
@@ -73,7 +79,10 @@ function getSheetByGid(ss, gid) {
 // ==========================================
 
 function appendPengirimanAman(sheet, rowData, mode = "Laporan") {
-  const colData = sheet.getRange("B:B").getValues(); 
+  // OPTIMASI: batasi baca ke getLastRow() (metadata cepat) alih-alih seluruh
+  // kolom B (bisa ribuan baris kosong terformat) -> hasil scan sama persis, jauh lebih cepat.
+  const sheetLastRow = sheet.getLastRow();
+  const colData = sheetLastRow > 0 ? sheet.getRange(1, 2, sheetLastRow, 1).getValues() : [];
   let lastRow = 0;
   for (let i = colData.length - 1; i >= 0; i--) {
     if (colData[i][0] !== "") {
@@ -105,7 +114,9 @@ function appendPengirimanAman(sheet, rowData, mode = "Laporan") {
 
 // Modifikasi agar bisa menerima parameter warna latar (bgColor)
 function appendMasterAman(sheet, rowData, bgColor = null) {
-  const colData = sheet.getRange("A:A").getValues(); 
+  // OPTIMASI: sama seperti appendPengirimanAman, batasi baca ke getLastRow().
+  const sheetLastRow = sheet.getLastRow();
+  const colData = sheetLastRow > 0 ? sheet.getRange(1, 1, sheetLastRow, 1).getValues() : [];
   let lastRow = 0;
   for (let i = colData.length - 1; i >= 0; i--) {
     if (colData[i][0] !== "") {
@@ -127,6 +138,12 @@ function appendMasterAman(sheet, rowData, bgColor = null) {
 // ==========================================
 
 function getSalesListInternal() {
+  // OPTIMASI: daftar sales jarang berubah, cache 25 menit. Ikut dihapus saat ada write sukses (lihat doPost).
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'super_eggo_sales_list';
+  const cached = cache.get(cacheKey);
+  if (cached !== null) return JSON.parse(cached);
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = getSheetByGid(ss, 1772680131); 
   if (!sheet) return [];
@@ -137,15 +154,24 @@ function getSalesListInternal() {
     let sales = String(data[i][7] || "").trim(); 
     if (sales !== "" && sales.toLowerCase() !== "pic sales") uniqueSales.push(sales);
   }
-  return [...new Set(uniqueSales)].sort();
+  const result = [...new Set(uniqueSales)].sort();
+  cache.put(cacheKey, JSON.stringify(result), 1500);
+  return result;
 }
 
 function getStoresBySalesInternal(salesName) {
+  // OPTIMASI: sama pola dengan getRoutingDataInternal -> cache per sales, 15 menit,
+  // dihapus saat sales ybs baru saja submit (lihat doPost). Hasil "Error:..." sengaja tidak dicache.
+  const targetSales = String(salesName).trim().toLowerCase();
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'stores_cache_' + targetSales;
+  const cached = cache.get(cacheKey);
+  if (cached !== null) return JSON.parse(cached);
+
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const pengirimanSheet = getSheetByGid(ss, 1790905023); 
   if (!pengirimanSheet) return ["Error: Gagal terhubung ke Tab Pengiriman"];
   
-  const targetSales = String(salesName).trim().toLowerCase();
   const pengirimanData = pengirimanSheet.getDataRange().getValues();
   const validStores = new Map();
   
@@ -160,7 +186,10 @@ function getStoresBySalesInternal(salesName) {
     }
   }
   if (validStores.size === 0) return ["Error: Tidak ada tagihan 'Belum' untuk Sales ini"];
-  return Array.from(validStores.values()).sort((a, b) => a.nama.localeCompare(b.nama));
+  
+  const result = Array.from(validStores.values()).sort((a, b) => a.nama.localeCompare(b.nama));
+  cache.put(cacheKey, JSON.stringify(result), 900);
+  return result;
 }
 
 function getMapDataInternal() {
@@ -233,26 +262,22 @@ function submitLaporanInternal(data) {
   if (targetRowIndex === -1) return { success: false, message: "Data toko tidak ditemukan." };
 
   let today = new Date();
-  // UPDATE BARIS LAMA
+  let kolomJ = (data.status === 'Restock') ? data.jumlahRestock : "Stop";
+
+  // UPDATE BARIS LAMA (OPTIMASI: kolom H-J dan N-Q sama-sama berdampingan & isinya
+  // literal biasa -tanpa rumus-, jadi digabung jadi 2 panggilan setValues() alih-alih
+  // 6 panggilan setValue() terpisah. Nilai & kolom tujuan identik dengan sebelumnya.)
   pengirimanSheet.getRange(targetRowIndex, 1).setValue(today); // Timpa tanggal menjadi hari ini
-  pengirimanSheet.getRange(targetRowIndex, 14).setValue('Perlu Direview'); 
-  pengirimanSheet.getRange(targetRowIndex, 15).setValue(data.keterangan);  
-  pengirimanSheet.getRange(targetRowIndex, 16).setValue(fileUrl); 
-  pengirimanSheet.getRange(targetRowIndex, 17).setValue('Sudah dikunjungi'); // Eksekusi Kolom Q
-  pengirimanSheet.getRange(targetRowIndex, 8).setValue(data.sisaTelur); 
-  pengirimanSheet.getRange(targetRowIndex, 9).setValue(data.setoranClean); 
+  pengirimanSheet.getRange(targetRowIndex, 8, 1, 3).setValues([[data.sisaTelur, data.setoranClean, kolomJ]]); // H,I,J
+  pengirimanSheet.getRange(targetRowIndex, 14, 1, 4).setValues([['Perlu Direview', data.keterangan, fileUrl, 'Sudah dikunjungi']]); // N,O,P,Q
   
   if (data.status === 'Restock') {
-    pengirimanSheet.getRange(targetRowIndex, 10).setValue(data.jumlahRestock); 
-    
     let nextWeek = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000); // Kalkulasi H+7
     let newInvoice = "INV" + String(lastInvoiceNum + 1).padStart(3, '0');
     let barangStatis = 'TAO001 - Paket Telur Asin Omega 10 Butir (Agen)';
     
     let newRow = [today, newInvoice, data.toko, "", barangStatis, data.sales, "", "", "", "", data.jumlahRestock, "", "", "Belum", "", "", nextWeek];
     appendPengirimanAman(pengirimanSheet, newRow, "Laporan");
-  } else {
-    pengirimanSheet.getRange(targetRowIndex, 10).setValue("Stop"); 
   }
   return { success: true, message: "Laporan berhasil masuk ke spreadsheet!" };
 }
@@ -284,8 +309,9 @@ function submitTitikBaruInternal(data) {
   }
   let newWrgId = "WRG" + String(lastWrgNum + 1).padStart(3, '0');
   
-  // Ambil data akurat untuk baris rumus
-  const colDataM = masterSheet.getRange("A:A").getValues();
+  // Ambil data akurat untuk baris rumus (OPTIMASI: batasi baca ke getLastRow())
+  const masterSheetLastRow = masterSheet.getLastRow();
+  const colDataM = masterSheetLastRow > 0 ? masterSheet.getRange(1, 1, masterSheetLastRow, 1).getValues() : [];
   let lastRowM = 0;
   for (let i = colDataM.length - 1; i >= 0; i--) { if (colDataM[i][0] !== "") { lastRowM = i + 1; break; } }
   let newRowMasterNum = lastRowM + 1;
@@ -344,8 +370,9 @@ function submitEndCustomerInternal(data) {
   }
   let newCstId = "CST" + String(lastCstNum + 1).padStart(3, '0');
   
-  // Ambil data akurat untuk baris rumus
-  const colDataM = masterSheet.getRange("A:A").getValues();
+  // Ambil data akurat untuk baris rumus (OPTIMASI: batasi baca ke getLastRow())
+  const masterSheetLastRow = masterSheet.getLastRow();
+  const colDataM = masterSheetLastRow > 0 ? masterSheet.getRange(1, 1, masterSheetLastRow, 1).getValues() : [];
   let lastRowM = 0;
   for (let i = colDataM.length - 1; i >= 0; i--) { if (colDataM[i][0] !== "") { lastRowM = i + 1; break; } }
   let newRowMasterNum = lastRowM + 1;
@@ -466,14 +493,32 @@ function getRoutingDataInternal(payload) {
   const pengirimanData = pengirimanSheet.getDataRange().getValues();
   const masterData = masterSheet.getDataRange().getValues();
   
-  const masterCoords = new Map();
+  // PERBAIKAN: 3 peta lookup (bukan cuma teks lengkap "ID - Nama") karena teks di
+  // Pengiriman!C bisa basi begitu nama toko diedit di Master, atau baris lama
+  // sama sekali tidak punya prefix ID. ID sendiri tidak pernah berubah, jadi
+  // itu fallback paling andal; nama polos jadi fallback terakhir.
+  const masterCoordsByText = new Map();
+  const masterCoordsById = new Map();
+  const masterCoordsByName = new Map();
   for (let i = 1; i < masterData.length; i++) {
+    let idToko = String(masterData[i][0] || "").trim();
+    let namaToko = String(masterData[i][1] || "").trim();
     let displayToko = String(masterData[i][4] || "").trim(); 
     let lat = parseFloat(masterData[i][5]); 
     let lng = parseFloat(masterData[i][6]); 
-    if (displayToko !== "") {
-      masterCoords.set(displayToko, { lat: lat, lng: lng });
-    }
+    let coords = { lat: lat, lng: lng };
+    if (displayToko !== "") masterCoordsByText.set(displayToko.toLowerCase(), coords);
+    if (idToko !== "") masterCoordsById.set(idToko.toLowerCase(), coords);
+    if (namaToko !== "") masterCoordsByName.set(namaToko.toLowerCase(), coords);
+  }
+  
+  function cariKoordinatToko(tokoPengiriman) {
+    let key = tokoPengiriman.toLowerCase();
+    if (masterCoordsByText.has(key)) return masterCoordsByText.get(key);
+    let idPart = key.split(' - ')[0].trim();
+    if (masterCoordsById.has(idPart)) return masterCoordsById.get(idPart);
+    if (masterCoordsByName.has(key)) return masterCoordsByName.get(key);
+    return null;
   }
   
   const validStores = new Map();
@@ -490,8 +535,10 @@ function getRoutingDataInternal(payload) {
     }
     
     // Perubahan di baris ini: mengizinkan tarikan data jika filter "Semua" diaktifkan
-    if (statusBayar === 'belum' && (isSemuaSales || picPengiriman === targetSales) && tokoPengiriman !== "" && isDateValid) {
-      let coords = masterCoords.get(tokoPengiriman);
+    // PERBAIKAN: toko tanpa PIC/Sales terisi tidak boleh masuk rute (khususnya mode "Semua Sales"),
+    // karena tidak ada sales valid untuk ditugaskan -> laporan dari toko ini pasti gagal disimpan.
+    if (statusBayar === 'belum' && (isSemuaSales || picPengiriman === targetSales) && tokoPengiriman !== "" && picPengiriman !== "" && isDateValid) {
+      let coords = cariKoordinatToko(tokoPengiriman);
       if (coords && !isNaN(coords.lat) && !isNaN(coords.lng)) {
         let picAsli = String(pengirimanData[i][5] || "").trim(); // Tarik PIC asli dari kolom F Pengiriman
 

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Super Eggo V2 - Pembeli End User (Sandbox)</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="stylesheet" href="shared/style.css">
+    <style>
+      .eu-foto-preview { position: relative; margin-bottom: 16px; }
+      .eu-foto-preview img { width: 100%; border-radius: 12px; display: block; background: #eee; }
+      .eu-foto-hapus { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; margin: 0; padding: 0; border-radius: 50%; background: rgba(17,24,39,0.75); color: #fff; font-size: 16px; }
+      .btn-tambah-foto { background: #F3F4F6; color: var(--text-main); border: 1.5px dashed #D1D5DB; }
+      .btn-tambah-foto:hover { background: #E5E7EB; }
+    </style>
+  </head>
+  <body>
+
+    <div id="custom-alert" class="modal-overlay">
+      <div class="modal-content">
+        <div id="alert-icon" class="modal-icon"></div>
+        <h3 id="alert-title" class="modal-title">Info</h3>
+        <p id="alert-text" class="modal-text">Pesan</p>
+        <button onclick="tutupAlert()" class="btn-primary" id="alert-btn">Mengerti</button>
+      </div>
+    </div>
+
+    <div class="container">
+
+      <div class="feature-header">
+        <button class="btn-back-icon" onclick="location.href='index.html'" aria-label="Kembali">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2>Pembeli End User</h2>
+        <span class="badge-sandbox-mini">Sandbox</span>
+      </div>
+
+      <div class="scroll-area has-sticky-bottom">
+
+      <div id="form-section">
+        <div class="form-group"><label>Nama Customer:</label><input type="text" id="eu-nama" placeholder="Nama pembeli"></div>
+        <div class="form-group"><label>No HP:</label><input type="text" inputmode="numeric" id="eu-hp" placeholder="08..."></div>
+        <div class="form-group"><label>Jumlah Beli (Butir):</label><input type="number" id="eu-jumlah" placeholder="0"></div>
+        <div class="form-group"><label>Nama Sales:</label><input type="text" id="eu-sales" placeholder="Nama Anda"></div>
+
+        <div class="form-group">
+          <label>Foto (Opsional):</label>
+          <div id="eu-foto-preview" class="eu-foto-preview hidden">
+            <img id="eu-foto-img" src="">
+            <button type="button" class="eu-foto-hapus" onclick="hapusFotoEndUser()" aria-label="Hapus foto">✕</button>
+          </div>
+          <button type="button" class="btn-tambah-foto" id="eu-btn-tambah-foto" onclick="document.getElementById('eu-input-foto').click()">+ Tambah Foto</button>
+          <input type="file" id="eu-input-foto" accept="image/*" capture="environment" class="hidden" onchange="prosesFotoEndUser(event)">
+        </div>
+      </div>
+
+      </div>
+
+    </div>
+
+    <div class="sticky-bottom">
+      <div class="sticky-bottom-inner">
+        <button class="btn-success" id="btn-kirim-eu" onclick="kirimPembeliEndUser()">Kirim</button>
+      </div>
+    </div>
+
+    <script src="shared/app.js"></script>
+    <script>
+      let dropdownData = {};
+      let euFotoDataUrl = null;
+
+      document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('eu-sales').value = ambilNamaSalesLogin();
+      });
+
+      function prosesFotoEndUser(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = new Image();
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const maxWidth = 800;
+            const scale = maxWidth / img.width;
+            canvas.width = maxWidth;
+            canvas.height = img.height * scale;
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+
+            euFotoDataUrl = kompresCanvasKeDataUrl(canvas);
+            document.getElementById('eu-foto-img').src = euFotoDataUrl;
+            document.getElementById('eu-foto-preview').classList.remove('hidden');
+            document.getElementById('eu-btn-tambah-foto').classList.add('hidden');
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        event.target.value = "";
+      }
+
+      function hapusFotoEndUser() {
+        euFotoDataUrl = null;
+        document.getElementById('eu-foto-preview').classList.add('hidden');
+        document.getElementById('eu-btn-tambah-foto').classList.remove('hidden');
+      }
+
+      function kirimPembeliEndUser() {
+        const nama = document.getElementById('eu-nama').value.trim();
+        const hp = document.getElementById('eu-hp').value.trim();
+        const jumlah = document.getElementById('eu-jumlah').value;
+        const sales = document.getElementById('eu-sales').value.trim();
+
+        if (!nama || !hp || !jumlah || !sales) {
+          return tampilAlert('warning', 'Data Belum Lengkap', 'Harap lengkapi Nama Customer, No HP, Jumlah Beli, dan Nama Sales.');
+        }
+
+        const btn = document.getElementById('btn-kirim-eu');
+        tampilLoadingTombol(btn);
+
+        const payload = {
+          namaCustomer: nama,
+          hp: hp,
+          jumlahBeli: parseInt(jumlah, 10) || 0,
+          namaSales: sales,
+          timestamp: new Date().toLocaleString('id-ID'),
+          fotoBase64: euFotoDataUrl
+        };
+
+        jalankanFetchAPI('submitPembeliEndUser', payload).then(res => {
+          sembunyikanLoadingTombol(btn);
+          if (res.success) {
+            tampilAlert('success', 'Berhasil', res.message, () => location.reload());
+          } else {
+            tampilAlert('error', 'Gagal', res.message || 'Terjadi kesalahan.');
+          }
+        }).catch(err => {
+          sembunyikanLoadingTombol(btn);
+          tampilAlert('error', 'Koneksi Gagal', err.message || 'Gagal mengirim data ke server.');
+        });
+      }
+    </script>
+  </body>
+</html>

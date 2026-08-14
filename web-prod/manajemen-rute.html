@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Super Eggo V2 - Manajemen Rute</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="shared/style.css">
+    <style>
+      .toko-detail-box { background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+      .detail-row { padding: 10px 14px; border-bottom: 1px solid #DDE3FC; }
+      .detail-row:last-child { border-bottom: none; }
+      .detail-label { display: block; font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
+      .detail-value { display: block; font-size: 14.5px; font-weight: 600; color: var(--text-main); word-break: break-word; }
+      .keterangan-lama-preview { font-size: 12px; color: var(--text-muted); margin: 6px 0 0 0; font-style: italic; }
+
+      .map-preview-box { width: 100%; height: 230px; border-radius: 12px; border: 1.5px solid #E5E7EB; margin-bottom: 15px; z-index: 1; }
+      .custom-pin-marker { border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
+      .pin-numbered { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold; }
+      .leaflet-tooltip.map-label { background: transparent; border: none; box-shadow: none; font-weight: 800; font-size: 11px; color: #1F2937; text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white; }
+
+      .chk-list { max-height: 50vh; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 12px; padding: 8px 10px; background: #F9FAFB; margin-bottom: 15px; }
+      .chk-item { display: flex; align-items: center; gap: 12px; padding: 16px 10px; border-bottom: 1px solid #E5E7EB; font-size: 16px; cursor: pointer; }
+      .chk-item:last-child { border-bottom: none; }
+      .chk-item:active { background-color: #EEF2FF; }
+      .chk-item-terpilih { background-color: #EEF2FF; }
+      .chk-check { flex-shrink: 0; width: 20px; text-align: center; color: var(--primary); font-weight: 800; font-size: 15px; }
+      .chk-empty { text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13.5px; }
+
+      .hari-box { border: 1px solid #E5E7EB; border-radius: 12px; margin-bottom: 10px; overflow: hidden; background: #F9FAFB; }
+      .hari-box-header { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+      .hari-box-nama { flex: 1; font-weight: 700; font-size: 14.5px; color: var(--text-main); }
+      .hari-box-count { flex-shrink: 0; font-size: 11px; font-weight: 700; color: var(--text-muted); background: #E5E7EB; padding: 3px 9px; border-radius: 20px; }
+      .hari-box-btn-tambah { flex-shrink: 0; width: auto; margin: 0; padding: 7px 11px; font-size: 11.5px; font-weight: 700; background: var(--primary); color: #fff; border-radius: 8px; }
+      .hari-box-body { padding: 0 10px 6px; border-top: 1px solid #E5E7EB; }
+      .hari-box-body .chk-item { padding: 12px 6px; }
+      .hari-box-body .chk-item:last-child { border-bottom: none; }
+
+      .sortable-list { list-style: none; padding: 0; margin: 0 0 15px 0; max-height: 40vh; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 12px; background: #F9FAFB; touch-action: pan-y; }
+      .sortable-item { display: flex; align-items: center; padding: 14px 12px; border-bottom: 1px solid #E5E7EB; background: #FFF; font-size: 15.5px; gap: 12px; }
+      .sortable-item:last-child { border-bottom: none; }
+      .sortable-ghost { opacity: 0.4; background-color: #EEF2FF; }
+      .drag-handle { color: #9CA3AF; font-size: 24px; cursor: grab; padding: 6px 12px 6px 2px; touch-action: none; }
+      .drag-handle:active { cursor: grabbing; }
+      .stop-badge { background: var(--primary); color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; flex-shrink: 0; }
+      .stop-nama { flex: 1; font-weight: 600; }
+
+      .route-stop-card { display: flex; align-items: center; gap: 12px; border: 1.5px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 10px; background: #FFF; cursor: pointer; }
+      .route-stop-card.status-dilapor { background: #D1FAE5; border-color: #6EE7B7; }
+      .route-stop-card.status-tutup { background: #FEE2E2; border-color: #FCA5A5; }
+      .route-stop-card .stop-nama { font-size: 16px; font-weight: 700; }
+      .route-stop-card .stop-nav-btn { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #F3F4F6; color: var(--secondary); }
+      .route-stop-card .stop-nav-btn:hover { background: #E5E7EB; }
+      .stop-tutup-label { flex-shrink: 0; font-size: 12px; font-weight: 700; color: white; background: var(--danger); padding: 4px 10px; border-radius: 20px; }
+
+      .sektor-box { margin-bottom: 22px; border-radius: 14px; overflow: hidden; border: 1.5px solid #E5E7EB; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+      .sektor-heading { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; }
+      .sektor-heading .sektor-nama { font-weight: 800; font-size: 17px; color: white; }
+      .sektor-heading .sektor-count { flex-shrink: 0; font-size: 12px; font-weight: 700; color: white; background: rgba(255,255,255,0.28); padding: 4px 11px; border-radius: 20px; }
+      .sektor-body { padding: 12px; background: #FAFAFA; }
+      .btn-buka-jalur { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 4px 0 0; padding: 16px; border-radius: 10px; background: var(--primary); color: white; font-weight: 700; font-size: 16px; text-decoration: none; box-sizing: border-box; }
+      .btn-buka-jalur.selesai { background: var(--secondary); }
+
+      .rekap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+      .rekap-tile { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px; text-align: center; }
+      .rekap-tile .rekap-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+      .rekap-tile .rekap-value { font-size: 18px; font-weight: 800; color: var(--text-main); margin-top: 4px; }
+      .rekap-tokotutup-list { background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 12px; padding: 12px 14px; margin-bottom: 18px; font-size: 13px; }
+      .rekap-tokotutup-list p { margin: 3px 0; }
+
+      /* min-height:0 wajib -- tanpa ini, flex item (child .modal-overlay yang display:flex)
+         menolak menyusut di bawah ukuran konten aslinya, jadi max-height/overflow-y diabaikan
+         dan modal bisa tumbuh sampai keluar layar (tombol paling bawah jadi tak terjangkau tap). */
+      .modal-content-lg { max-height: 88vh; min-height: 0; overflow-y: auto; text-align: left; }
+      .modal-content-lg h3 { text-align: center; }
+      #custom-alert, #custom-confirm { z-index: 10010; }
+    </style>
+  </head>
+  <body>
+
+    <div id="loading-overlay" class="hidden">
+      <div class="spinner"></div>
+      <h3 id="loading-text">Memproses Data...</h3>
+      <p style="font-size: 13px; margin-top:8px; color: var(--text-muted);" id="loading-sub">Sistem sedang bekerja.</p>
+    </div>
+
+    <div id="custom-alert" class="modal-overlay">
+      <div class="modal-content">
+        <div id="alert-icon" class="modal-icon"></div>
+        <h3 id="alert-title" class="modal-title">Info</h3>
+        <p id="alert-text" class="modal-text">Pesan</p>
+        <button onclick="tutupAlert()" class="btn-primary" id="alert-btn">Mengerti</button>
+      </div>
+    </div>
+
+    <div id="custom-confirm" class="modal-overlay">
+      <div class="modal-content">
+        <div class="modal-icon warning">?</div>
+        <h3 id="confirm-title" class="modal-title">Konfirmasi</h3>
+        <p id="confirm-text" class="modal-text">Apakah Anda yakin?</p>
+        <div class="dual-btn">
+          <button onclick="tutupConfirm()" class="btn-secondary">Batal</button>
+          <button id="confirm-btn-yes" class="btn-danger">Ya, Lanjutkan</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="container">
+
+      <div class="feature-header">
+        <button class="btn-back-icon" id="btn-header-back" onclick="location.href='index.html'" aria-label="Kembali">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2>Manajemen Rute</h2>
+      </div>
+
+      <div class="scroll-area has-sticky-bottom">
+
+      <div id="pilih-rute-section">
+        <div id="map-preview-pilih" class="map-preview-box"></div>
+
+        <div class="form-group">
+          <div class="search-wrapper">
+            <input type="text" id="cari-rute-input" placeholder="Memuat daftar toko..." oninput="filterChecklistRute()">
+            <button type="button" class="search-clear-btn hidden" id="cari-rute-clear" onclick="clearCariRute()" aria-label="Hapus pencarian">✕</button>
+          </div>
+        </div>
+
+        <p id="jumlah-toko-aktif" style="font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin: 0 0 8px 2px;">Toko Aktif : 0</p>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <p id="jumlah-toko-terpilih" style="font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin:0;">Terpilih : 0</p>
+          <button type="button" class="btn-secondary" style="width:auto; margin:0; padding:6px 12px; font-size:12px;" onclick="toggleSemuaChecklist()">Pilih/Hapus Semua</button>
+        </div>
+
+        <div id="checklist-rute" class="chk-list"></div>
+      </div>
+
+      <div id="atur-jalur-section" class="hidden">
+        <div id="map-preview-jalur" class="map-preview-box"></div>
+        <ul id="sortable-route-list" class="sortable-list"></ul>
+      </div>
+
+      <div id="stok-bawa-section" class="hidden">
+        <h3 style="margin-top:0; text-align:center; color: var(--primary);">Stok Bawa</h3>
+        <p style="font-size: 11.5px; color: var(--text-muted); text-align: center; margin: -5px 0 15px 0; line-height:1.4;">Catat jumlah telur yang dibawa (hanya tersimpan di HP ini, tidak dikirim ke server).</p>
+
+        <div id="stok-bawa-form">
+          <div class="form-group"><label>Stok Bawa (Butir):</label><input type="number" id="sb-jumlah" placeholder="0"></div>
+        </div>
+
+        <div id="stok-bawa-result" class="hidden">
+          <canvas id="sb-canvas-foto" style="width:100%; border-radius:12px; margin-bottom:10px;"></canvas>
+          <p id="sb-timestamp-text" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 0;"></p>
+          <button class="btn-secondary" style="margin-top:0;" onclick="document.getElementById('sb-input-kamera').click()">Ulangi Foto Saja</button>
+        </div>
+
+        <input type="file" id="sb-input-kamera" accept="image/*" capture="environment" class="hidden" onchange="prosesFotoStokBawa(event)">
+      </div>
+
+      <div id="dashboard-rute-section" class="hidden">
+        <h3 style="margin-top:0; text-align:center; color: var(--primary);">Dashboard Rute Aktif</h3>
+        <p style="font-size: 11.5px; color: var(--text-muted); text-align: center; margin: -5px 0 15px 0; line-height:1.4;">Tekan toko untuk lapor kunjungan atau tandai tutup (tersimpan lokal di HP ini).</p>
+
+        <div id="daftar-rute-aktif"></div>
+      </div>
+
+      <div id="rekap-section" class="hidden">
+        <h3 style="margin-top:0; margin-bottom:2px; text-align:center; color: var(--primary);">Rekap Rute</h3>
+        <p id="rekap-tanggal-lock" style="margin:0; text-align:center; font-size:12.5px; color:var(--text-muted); font-weight:600;"></p>
+        <p id="rekap-toko-dikunjungi-teks" style="margin:0 0 15px; text-align:center; font-size:12.5px; color:var(--text-muted); font-weight:600;"></p>
+
+        <div class="rekap-grid">
+          <div class="rekap-tile"><div class="rekap-label">Telur Awal</div><div class="rekap-value" id="rekap-telur-awal">0 btr</div></div>
+          <div class="rekap-tile"><div class="rekap-label">Telur Keluar</div><div class="rekap-value" id="rekap-restock">0 btr</div></div>
+          <div class="rekap-tile"><div class="rekap-label">Sisa Telur Baru</div><div class="rekap-value" id="rekap-sisa-baru">0 btr</div></div>
+          <div class="rekap-tile"><div class="rekap-label">Telur Retur</div><div class="rekap-value" id="rekap-sisa">0 btr</div></div>
+          <div class="rekap-tile"><div class="rekap-label">Total Setoran</div><div class="rekap-value" id="rekap-setoran">Rp 0</div></div>
+          <div class="rekap-tile"><div class="rekap-label">Toko Tutup</div><div class="rekap-value" id="rekap-tutup">0</div></div>
+        </div>
+
+        <div class="rekap-tokotutup-list hidden" id="rekap-tokotutup-box">
+          <strong>Daftar Toko Tutup:</strong>
+          <div id="rekap-tokotutup-isi"></div>
+        </div>
+
+        <button class="btn-primary" id="btn-kirim-laporan" onclick="kirimLaporanWA()">Kirim Laporan</button>
+      </div>
+
+      </div>
+
+    </div>
+
+    <div class="sticky-bottom">
+      <div class="sticky-bottom-inner">
+        <button class="btn-primary hidden" id="btn-lanjut-jalur" onclick="lanjutAturJalur()">Lanjut: Atur Jalur di Peta</button>
+        <button class="btn-success hidden" id="btn-kunci-rute" onclick="kunciRuteFinal()">Kunci &amp; Mulai Navigasi</button>
+        <button class="btn-danger hidden" id="btn-foto-stok-bawa" onclick="triggerFotoStokBawa()">Ambil Foto Stok Awal</button>
+        <button class="btn-success hidden" id="btn-lanjut-stok-bawa" onclick="selesaikanStokBawa()">Lanjut ke Rute</button>
+        <button class="btn-secondary hidden" id="btn-cek-rekap" onclick="tampilkanRekap()">Cek Rekap</button>
+        <button class="btn-danger hidden" id="btn-akhiri-rute" onclick="akhiriRute()">Akhiri Rute &amp; Hapus Data</button>
+      </div>
+    </div>
+
+    <input type="file" id="input-kamera-tutup" accept="image/*" capture="environment" class="hidden" onchange="prosesFotoTutup(event)">
+
+    <div id="modal-aksi-toko" class="modal-overlay">
+      <div class="modal-content">
+        <h3 class="modal-title" id="aksi-toko-nama">Nama Toko</h3>
+        <p class="modal-text">Pilih aksi untuk toko ini.</p>
+        <button class="btn-primary" onclick="mulaiLaporanRute()">Laporkan Kunjungan</button>
+        <button class="btn-danger" onclick="mulaiTokoTutup()">Toko Tutup (Ambil Foto)</button>
+        <button class="btn-secondary" onclick="tutupAksiToko()">Batal</button>
+      </div>
+    </div>
+
+    <div id="modal-tutup-preview" class="modal-overlay">
+      <div class="modal-content">
+        <h3 class="modal-title">Toko Tutup</h3>
+        <canvas id="tutup-canvas-preview" style="width:100%; border-radius:12px; margin-bottom:15px;"></canvas>
+        <button class="btn-success" id="btn-bagikan-tutup" onclick="bagikanFotoTutupSekarang()">Bagikan</button>
+      </div>
+    </div>
+
+    <div id="modal-laporan" class="modal-overlay">
+      <div class="modal-content modal-content-lg">
+        <h3>Laporkan Kunjungan</h3>
+
+        <div id="rl-form-lanjutan">
+          <div class="toko-detail-box">
+            <div class="detail-row">
+              <span class="detail-label">1. Nama Toko</span>
+              <span class="detail-value" id="rl-detail-nama">-</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">2. Telur Sebelumnya</span>
+              <span class="detail-value" id="rl-detail-telur">-</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">3. Keterangan Terakhir</span>
+              <span class="detail-value" id="rl-detail-keterangan">-</span>
+            </div>
+          </div>
+
+          <div class="form-group"><label>Sisa Telur (Butir):</label><input type="number" id="rl-sisa-telur" placeholder="0" oninput="rlKalkulasiSetoranOtomatis()"></div>
+          <div class="form-group"><label>Total Setoran (Rp):</label><input type="text" inputmode="numeric" id="rl-total-setoran" placeholder="0" oninput="formatRupiahInput(this)"></div>
+
+          <div class="form-group">
+            <label>Status:</label>
+            <div class="custom-select-wrapper">
+              <input type="text" id="rl-status-input" class="custom-select-input" placeholder="-- Pilih Status --" autocomplete="off">
+              <input type="hidden" id="rl-status-val">
+              <ul id="rl-status-list" class="custom-select-list"></ul>
+            </div>
+          </div>
+          <div class="form-group hidden" id="rl-input-restock-container"><label>Jumlah Restock (Butir):</label><input type="number" id="rl-jumlah-restock" placeholder="0"></div>
+
+          <div class="form-group">
+            <label>Keterangan:</label>
+            <textarea id="rl-keterangan" rows="2" placeholder="Catatan tambahan..." oninput="rlOnKeteranganInput()"></textarea>
+            <p class="keterangan-lama-preview hidden" id="rl-keterangan-lama-preview"></p>
+          </div>
+        </div>
+
+        <div id="rl-result-container" class="hidden">
+          <canvas id="rl-canvas-foto" style="width:100%; border-radius:12px; margin-bottom:10px;"></canvas>
+          <p id="rl-timestamp-text" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 0;"></p>
+          <button class="btn-secondary" style="margin-top:0;" onclick="document.getElementById('rl-input-kamera').click()">Ulangi Foto Saja</button>
+        </div>
+
+        <div id="rl-konfirmasi-section" class="hidden">
+          <h3 style="text-align:center; color: var(--warning-hover);">Cek Kembali Data!</h3>
+          <div class="summary-box" id="rl-summary-box-content"></div>
+        </div>
+
+        <input type="file" id="rl-input-kamera" accept="image/*" capture="environment" class="hidden" onchange="rlProsesFoto(event)">
+
+        <button class="btn-danger hidden" id="rl-btn-ambil-foto" style="margin-top:16px;" onclick="rlTriggerKamera()">Ambil Foto &amp; Lanjut Review</button>
+        <div class="dual-btn hidden" id="rl-btn-konfirmasi-group" style="margin-top:16px;">
+          <button class="btn-secondary" onclick="rlEditFormulir()">Batal &amp; Edit</button>
+          <button class="btn-success" onclick="rlEksekusiKirim()">Kirim Final</button>
+        </div>
+        <button class="btn-secondary" style="margin-top:8px;" onclick="tutupModalLaporan()">Tutup</button>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="shared/app.js"></script>
+    <script>
+      const STORAGE_KEY = 'superEggoV2_ruteAktif';
+      const UKURAN_SEKTOR = 10; // batas maksimal titik per sektor (limit waypoint Google Maps)
+      const SEKTOR_WARNA = ["#4F46E5", "#EF4444", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#14B8A6", "#0EA5E9"];
+      const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];
+      const BULAN_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+      const URUTAN_HARI_JADWAL = ['Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu', 'Minggu']; // urutan tampil box jadwal kirim
+
+      // Cocokkan nilai Jadwal Kirim (kolom P, bisa diketik manual di spreadsheet) ke salah satu
+      // nama hari baku, longgar terhadap variasi ejaan (huruf besar/kecil, spasi, tanda kutip
+      // -- "Jumat" vs "Jum'at") -- return null kalau tidak cocok sama sekali (masuk Toko Lainnya).
+      function normalisasiHari(s) {
+        return String(s || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+      }
+      function cariHariKanonis(jadwal) {
+        const target = normalisasiHari(jadwal);
+        if (!target) return null;
+        return URUTAN_HARI_JADWAL.find(h => normalisasiHari(h) === target) || null;
+      }
+
+      let dropdownData = { 'rl-status': [] };
+      let daftarTokoRute = [];
+      let urutanTerpilih = []; // array id toko yang lagi dipilih buat rute (ditandai inline di box asalnya, tidak dipindah grup)
+      let urutanRute = []; // urutan yang lagi diedit di tahap Atur Jalur (belum dikunci)
+      let ruteAktif = null; // rute yang sudah dikunci: { createdAt, stops: [{id,nama,lat,lng,status,setoran,restock,sisaTelur}] }
+      let stopAktifId = null; // stop yang lagi dibuka modalnya
+      // Hasil foto Toko Tutup yang sudah diproses, menunggu ditap tombol Bagikan/Selesai di
+      // modal-tutup-preview -- disimpan dulu di sini (bukan langsung share) supaya share-nya
+      // dipicu dari klik tombol langsung (gesture segar), bukan otomatis setelah kamera balik.
+      let tutupDataUrl = null;
+      let tutupNamaFile = null;
+      let tutupTeksPesan = null;
+      let tutupStopRef = null;
+      let mapPilih, mapJalur;
+      let markersPilih = [];
+      let markersJalur = [];
+      let polylinePilih = null;
+      let polylineJalur = null;
+      let sortableInstance = null;
+
+      function formatTanggalIndo(d) {
+        return `${HARI_ID[d.getDay()]}, ${d.getDate()} ${BULAN_ID[d.getMonth()]} ${d.getFullYear()}`;
+      }
+      function formatJamIndo(d) {
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      }
+      function formatRupiah(n) {
+        return "Rp " + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+      }
+
+      function tampilConfirm(judul, pesan, onConfirmYes) {
+        document.getElementById('confirm-title').textContent = judul;
+        document.getElementById('confirm-text').textContent = pesan;
+        const btnYes = document.getElementById('confirm-btn-yes');
+        const newBtnYes = btnYes.cloneNode(true);
+        btnYes.parentNode.replaceChild(newBtnYes, btnYes);
+        newBtnYes.onclick = function() { onConfirmYes(); tutupConfirm(); };
+        document.getElementById('custom-confirm').classList.add('show');
+      }
+      function tutupConfirm() { document.getElementById('custom-confirm').classList.remove('show'); }
+
+      document.addEventListener("DOMContentLoaded", () => {
+        dropdownData['rl-status'] = [ {label: "Restock", value: "Restock"}, {label: "Stop", value: "Stop"} ];
+        initCustomDropdown('rl-status', (val) => {
+          if (val === 'Restock') document.getElementById('rl-input-restock-container').classList.remove('hidden');
+          else { document.getElementById('rl-input-restock-container').classList.add('hidden'); document.getElementById('rl-jumlah-restock').value = ''; }
+        });
+
+        sortableInstance = Sortable.create(document.getElementById('sortable-route-list'), {
+          animation: 150,
+          handle: '.drag-handle',
+          onEnd: function(evt) {
+            const ids = Array.from(document.querySelectorAll('#sortable-route-list .sortable-item')).map(el => el.dataset.id);
+            let reordered = ids.map(id => urutanRute.find(t => t.id === id));
+            urutanRute = urutkanNearestNeighborDariIndex(reordered, evt.newIndex);
+            renderSortableList();
+            renderPetaJalur();
+          }
+        });
+
+        cekRuteAktif();
+      });
+
+      function cekRuteAktif() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          ruteAktif = JSON.parse(saved);
+          tampilkanDashboard();
+        } else {
+          tampilkanPilihToko();
+        }
+      }
+
+      function simpanRuteAktif() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(ruteAktif));
+      }
+
+      // Haversine sederhana -- cukup buat perbandingan jarak relatif, tidak perlu presisi geodetik penuh.
+      function jarakKm(a, b) {
+        const R = 6371;
+        const dLat = (b.lat - a.lat) * Math.PI / 180;
+        const dLng = (b.lng - a.lng) * Math.PI / 180;
+        const lat1 = a.lat * Math.PI / 180;
+        const lat2 = b.lat * Math.PI / 180;
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(h));
+      }
+
+      // Titik dari index 0..mulaiDariIndex dianggap sudah fix (posisi manual dari user),
+      // sisanya diurutkan ulang secara greedy ke titik terdekat berikutnya.
+      function urutkanNearestNeighborDariIndex(daftar, mulaiDariIndex) {
+        const hasil = daftar.slice(0, mulaiDariIndex + 1);
+        let sisa = daftar.slice(mulaiDariIndex + 1);
+        let titikAcuan = hasil[hasil.length - 1];
+
+        while (sisa.length > 0) {
+          let idxTerdekat = 0;
+          let jarakTerdekat = Infinity;
+          sisa.forEach((t, i) => {
+            const jarak = jarakKm(titikAcuan, t);
+            if (jarak < jarakTerdekat) { jarakTerdekat = jarak; idxTerdekat = i; }
+          });
+          const [titikTerdekat] = sisa.splice(idxTerdekat, 1);
+          hasil.push(titikTerdekat);
+          titikAcuan = titikTerdekat;
+        }
+
+        return hasil;
+      }
+
+      function tampilStickyBottom(mode) {
+        document.getElementById('btn-lanjut-jalur').classList.toggle('hidden', mode !== 'pilih');
+        document.getElementById('btn-kunci-rute').classList.toggle('hidden', mode !== 'jalur');
+        document.getElementById('btn-foto-stok-bawa').classList.toggle('hidden', mode !== 'stok-bawa-form');
+        document.getElementById('btn-lanjut-stok-bawa').classList.toggle('hidden', mode !== 'stok-bawa-konfirmasi');
+        document.getElementById('btn-cek-rekap').classList.toggle('hidden', mode !== 'dashboard');
+        document.getElementById('btn-akhiri-rute').classList.toggle('hidden', mode !== 'rekap');
+      }
+
+      // ===== TAHAP 1: PILIH TOKO =====
+
+      function tampilkanPilihToko() {
+        document.getElementById('pilih-rute-section').classList.remove('hidden');
+        document.getElementById('atur-jalur-section').classList.add('hidden');
+        document.getElementById('dashboard-rute-section').classList.add('hidden');
+        tampilStickyBottom('pilih');
+        document.getElementById('btn-header-back').onclick = () => location.href = 'index.html';
+
+        if (!mapPilih) {
+          mapPilih = L.map('map-preview-pilih').setView([-7.5666, 110.8166], 12);
+          L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps', maxZoom: 20 }).addTo(mapPilih);
+        }
+        setTimeout(() => mapPilih.invalidateSize(), 100);
+
+        if (daftarTokoRute.length === 0) {
+          muatDaftarTokoRute();
+        } else {
+          terapkanFilterDanRender();
+          renderMarkerPilih(true);
+        }
+      }
+
+      function muatDaftarTokoRute() {
+        document.getElementById('cari-rute-input').value = "";
+        jalankanFetchAPI('getTokoUntukRute').then(res => {
+          document.getElementById('cari-rute-input').placeholder = "Cari nama toko...";
+          daftarTokoRute = res || [];
+          terapkanFilterDanRender();
+          renderMarkerPilih(true);
+        }).catch(err => {
+          document.getElementById('cari-rute-input').placeholder = "Gagal memuat";
+          tampilAlert('error', 'Koneksi Gagal', 'Gagal mengambil daftar toko dari server.');
+        });
+      }
+
+      function renderMarkerPilih(refitBounds) {
+        markersPilih.forEach(m => mapPilih.removeLayer(m));
+        markersPilih = [];
+        if (polylinePilih) { mapPilih.removeLayer(polylinePilih); polylinePilih = null; }
+
+        let bounds = [];
+        daftarTokoRute.forEach(t => {
+          const terpilih = urutanTerpilih.includes(t.id);
+          const ukuran = terpilih ? 14 : 10;
+          const icon = L.divIcon({
+            className: '',
+            html: `<div class="custom-pin-marker" style="background-color:${terpilih ? '#4F46E5' : '#9CA3AF'}; width:${ukuran}px; height:${ukuran}px;"></div>`,
+            iconSize: [ukuran, ukuran], iconAnchor: [ukuran / 2, ukuran / 2]
+          });
+          const marker = L.marker([t.lat, t.lng], { icon: icon }).addTo(mapPilih);
+          marker.bindTooltip(t.nama, { permanent: false, direction: 'top', className: 'map-label', offset: [0, -8] });
+          markersPilih.push(marker);
+          bounds.push([t.lat, t.lng]);
+        });
+
+        // Garis cuma bantu lihat sebaran/koneksi toko terpilih secara visual -- urutan titik
+        // ikut urutan pilih, bukan urutan rute final (itu baru ditentukan di tahap Atur Jalur).
+        const titikTerpilih = urutanTerpilih.map(id => daftarTokoRute.find(t => t.id === id)).filter(t => t).map(t => [t.lat, t.lng]);
+        if (titikTerpilih.length > 1) {
+          polylinePilih = L.polyline(titikTerpilih, { color: '#4F46E5', weight: 3, opacity: 0.6, dashArray: '6 6' }).addTo(mapPilih);
+        }
+        if (refitBounds && bounds.length > 0) mapPilih.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+      }
+
+      function terapkanFilterDanRender() {
+        const q = document.getElementById('cari-rute-input').value.toLowerCase();
+        renderChecklistRute(daftarTokoRute.filter(t => t.nama.toLowerCase().includes(q)));
+      }
+
+      function renderChecklistRute(daftarTampil) {
+        const container = document.getElementById('checklist-rute');
+        container.innerHTML = "";
+        document.getElementById('jumlah-toko-aktif').textContent = `Toko Aktif : ${daftarTampil.length}`;
+
+        if (daftarTampil.length === 0) {
+          container.innerHTML = '<div class="chk-empty">Tidak ada toko ditemukan.</div>';
+          return;
+        }
+
+        // Toko Lainnya dan box per hari itu setara, cuma pembeda navigasi berdasar Jadwal
+        // Kirim (kolom P MASTER_WARUNG, terisi otomatis dari Buka Titik Baru/Laporan Satuan,
+        // atau diketik manual di spreadsheet). Pakai cariHariKanonis() (bukan bandingan string
+        // persis) supaya variasi ejaan manual (mis. "Jumat" vs "Jum'at") tetap kecocok --
+        // toko dengan jadwal tak dikenal masuk Toko Lainnya, JANGAN sampai hilang dari list.
+        // Box yang isinya kosong (termasuk gara-gara kefilter pencarian) tidak dirender sama
+        // sekali -- supaya "Toko Lainnya" otomatis hilang begitu semua toko sudah punya jadwal.
+        const tokoLainnya = daftarTampil.filter(t => !cariHariKanonis(t.jadwal));
+        if (tokoLainnya.length > 0) {
+          container.appendChild(buatGroupBox('Toko Lainnya', tokoLainnya, null));
+        }
+
+        URUTAN_HARI_JADWAL.forEach(hari => {
+          const tokoHari = daftarTampil.filter(t => cariHariKanonis(t.jadwal) === hari);
+          if (tokoHari.length > 0) {
+            container.appendChild(buatGroupBox(hari, tokoHari, hari));
+          }
+        });
+      }
+
+      function buatChkItem(t) {
+        const terpilih = urutanTerpilih.includes(t.id);
+        const item = document.createElement('div');
+        item.className = 'chk-item' + (terpilih ? ' chk-item-terpilih' : '');
+        item.innerHTML = `<span class="chk-check">${terpilih ? '✓' : ''}</span><span style="flex:1; font-weight:500; color:var(--text-main);">${t.nama}</span>`;
+        item.onclick = () => toggleTokoTerpilih(t.id, !terpilih);
+        return item;
+      }
+
+      // Box "Toko Lainnya" (hariUntukTombol=null, tanpa tombol) dan box per hari (dengan tombol
+      // "+ Tambah Semua") -- keduanya selalu full-expanded, tidak ada collapse.
+      function buatGroupBox(judul, daftarToko, hariUntukTombol) {
+        const box = document.createElement('div');
+        box.className = 'hari-box';
+
+        const header = document.createElement('div');
+        header.className = 'hari-box-header';
+        header.innerHTML = `
+          <span class="hari-box-nama">${judul}</span>
+          <span class="hari-box-count">${daftarToko.length}</span>
+          ${hariUntukTombol ? `<button type="button" class="hari-box-btn-tambah">+ Tambah Semua</button>` : ''}
+        `;
+        if (hariUntukTombol) {
+          header.querySelector('.hari-box-btn-tambah').onclick = () => toggleSemuaDiBox(daftarToko);
+        }
+        box.appendChild(header);
+
+        const body = document.createElement('div');
+        body.className = 'hari-box-body';
+        daftarToko.forEach(t => body.appendChild(buatChkItem(t)));
+        box.appendChild(body);
+
+        return box;
+      }
+
+      // Tombol "+ Tambah Semua" di box hari -- BUKAN buat assign jadwal, tapi shortcut pilih
+      // semua toko di box itu sekaligus buat rute hari ini. Toggle: kalau semua sudah
+      // terpilih, tap lagi membatalkan semuanya (konsisten dgn tombol "Pilih/Hapus Semua").
+      function toggleSemuaDiBox(daftarToko) {
+        const semuaTerpilih = daftarToko.length > 0 && daftarToko.every(t => urutanTerpilih.includes(t.id));
+        daftarToko.forEach(t => {
+          if (semuaTerpilih) urutanTerpilih = urutanTerpilih.filter(x => x !== t.id);
+          else if (!urutanTerpilih.includes(t.id)) urutanTerpilih.push(t.id);
+        });
+        document.getElementById('jumlah-toko-terpilih').textContent = `Terpilih : ${urutanTerpilih.length}`;
+        terapkanFilterDanRender();
+        renderMarkerPilih(false);
+      }
+
+      function toggleTokoTerpilih(id, terpilih) {
+        if (terpilih) {
+          if (!urutanTerpilih.includes(id)) urutanTerpilih.push(id);
+        } else {
+          urutanTerpilih = urutanTerpilih.filter(x => x !== id);
+        }
+        document.getElementById('jumlah-toko-terpilih').textContent = `Terpilih : ${urutanTerpilih.length}`;
+        terapkanFilterDanRender();
+        renderMarkerPilih(false);
+      }
+
+      function filterChecklistRute() {
+        const input = document.getElementById('cari-rute-input');
+        document.getElementById('cari-rute-clear').classList.toggle('hidden', input.value === '');
+        terapkanFilterDanRender();
+      }
+
+      function clearCariRute() {
+        const input = document.getElementById('cari-rute-input');
+        input.value = '';
+        filterChecklistRute();
+        input.focus();
+      }
+
+      function toggleSemuaChecklist() {
+        const q = document.getElementById('cari-rute-input').value.toLowerCase();
+        const tampil = daftarTokoRute.filter(t => t.nama.toLowerCase().includes(q));
+        const semuaTerpilih = tampil.length > 0 && tampil.every(t => urutanTerpilih.includes(t.id));
+        tampil.forEach(t => {
+          if (semuaTerpilih) urutanTerpilih = urutanTerpilih.filter(x => x !== t.id);
+          else if (!urutanTerpilih.includes(t.id)) urutanTerpilih.push(t.id);
+        });
+        document.getElementById('jumlah-toko-terpilih').textContent = `Terpilih : ${urutanTerpilih.length}`;
+        terapkanFilterDanRender();
+        renderMarkerPilih(false);
+      }
+
+      function lanjutAturJalur() {
+        if (urutanTerpilih.length === 0) return tampilAlert('warning', 'Belum Ada Toko', 'Pilih minimal 1 toko untuk dibuatkan rute.');
+
+        const terpilihSajaBelumUrut = urutanTerpilih.map(id => daftarTokoRute.find(t => t.id === id)).filter(t => t);
+        // Urutan awal otomatis pakai nearest-neighbor dari titik pertama yang dipilih.
+        urutanRute = urutkanNearestNeighborDariIndex(terpilihSajaBelumUrut, 0);
+
+        document.getElementById('pilih-rute-section').classList.add('hidden');
+        document.getElementById('atur-jalur-section').classList.remove('hidden');
+        tampilStickyBottom('jalur');
+        document.getElementById('btn-header-back').onclick = kembaliKePilihToko;
+        window.scrollTo(0, 0);
+
+        if (!mapJalur) {
+          mapJalur = L.map('map-preview-jalur').setView([-7.5666, 110.8166], 12);
+          L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps', maxZoom: 20 }).addTo(mapJalur);
+        }
+        setTimeout(() => mapJalur.invalidateSize(), 100);
+
+        renderSortableList();
+        renderPetaJalur();
+      }
+
+      // ===== TAHAP 2: ATUR JALUR =====
+
+      function renderSortableList() {
+        const list = document.getElementById('sortable-route-list');
+        list.innerHTML = "";
+        urutanRute.forEach((t, i) => {
+          const li = document.createElement('li');
+          li.className = 'sortable-item';
+          li.dataset.id = t.id;
+          li.innerHTML = `<span class="drag-handle">☰</span><span class="stop-badge">${i + 1}</span><span class="stop-nama">${t.nama}</span>`;
+          list.appendChild(li);
+        });
+      }
+
+      function renderPetaJalur() {
+        markersJalur.forEach(m => mapJalur.removeLayer(m));
+        markersJalur = [];
+        if (polylineJalur) { mapJalur.removeLayer(polylineJalur); polylineJalur = null; }
+
+        let bounds = [];
+        urutanRute.forEach((t, i) => {
+          const icon = L.divIcon({ className: '', html: `<div class="custom-pin-marker pin-numbered" style="background-color:#4F46E5;">${i + 1}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+          const marker = L.marker([t.lat, t.lng], { icon: icon }).addTo(mapJalur);
+          marker.bindTooltip(t.nama, { permanent: false, direction: 'top', className: 'map-label', offset: [0, -10] });
+          markersJalur.push(marker);
+          bounds.push([t.lat, t.lng]);
+        });
+
+        if (bounds.length > 1) {
+          // Garis lurus tampil dulu (instan), lalu di-upgrade ke rute jalan asli begitu OSRM selesai.
+          polylineJalur = L.polyline(bounds, { color: '#4F46E5', weight: 4, opacity: 0.7 }).addTo(mapJalur);
+          const rutePermintaan = urutanRute;
+          ambilRuteOSRM(rutePermintaan).then(coords => {
+            if (coords && polylineJalur && rutePermintaan === urutanRute) {
+              polylineJalur.setLatLngs(coords);
+            }
+          });
+        }
+        if (bounds.length > 0) mapJalur.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+      }
+
+      // ponytail: OSRM demo server publik (gratis, rate-limited, tanpa SLA) -- upgrade ke instance
+      // OSRM sendiri/berbayar kalau pemakaian sudah tinggi atau butuh keandalan produksi.
+      async function ambilRuteOSRM(stops) {
+        try {
+          const koordinat = stops.map(t => `${t.lng},${t.lat}`).join(';');
+          const url = `https://router.project-osrm.org/route/v1/driving/${koordinat}?overview=full&geometries=geojson`;
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.code !== 'Ok' || !data.routes || !data.routes[0]) return null;
+          return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]); // OSRM: [lng,lat] -> Leaflet: [lat,lng]
+        } catch (err) {
+          console.error('OSRM gagal, pakai garis lurus:', err);
+          return null;
+        }
+      }
+
+      function kembaliKePilihToko() {
+        document.getElementById('atur-jalur-section').classList.add('hidden');
+        document.getElementById('pilih-rute-section').classList.remove('hidden');
+        tampilStickyBottom('pilih');
+        document.getElementById('btn-header-back').onclick = () => location.href = 'index.html';
+        if (mapPilih) setTimeout(() => mapPilih.invalidateSize(), 100);
+        window.scrollTo(0, 0);
+      }
+
+      function kunciRuteFinal() {
+        if (urutanRute.length === 0) return tampilAlert('warning', 'Rute Kosong', 'Tidak ada toko untuk dikunci.');
+        // Belum disimpan ke localStorage di sini -- baru dipersist di selesaikanStokBawa(),
+        // supaya sesi yang di-reload/dibatalkan di tengah tahap Stok Bawa tidak lompat ke dashboard.
+        ruteAktif = {
+          createdAt: new Date().toISOString(),
+          stokBawa: 0,
+          stops: urutanRute.map(t => ({
+            id: t.id, nama: t.nama, lat: t.lat, lng: t.lng,
+            status: 'belum', // 'belum' | 'dilapor' | 'tutup'
+            setoran: 0, restock: 0, sisaTelur: 0
+          }))
+        };
+        mulaiTahapStokBawa();
+      }
+
+      // ===== STOK BAWA (input lokal + foto watermark, sebelum dashboard) =====
+
+      let sbOriginalImage = new Image();
+      let sbTimestamp = "";
+
+      function mulaiTahapStokBawa() {
+        document.getElementById('atur-jalur-section').classList.add('hidden');
+        document.getElementById('stok-bawa-section').classList.remove('hidden');
+        document.getElementById('sb-jumlah').value = "";
+        document.getElementById('stok-bawa-form').classList.remove('hidden');
+        document.getElementById('stok-bawa-result').classList.add('hidden');
+        tampilStickyBottom('stok-bawa-form');
+        document.getElementById('btn-header-back').onclick = batalTahapStokBawa;
+        window.scrollTo(0, 0);
+      }
+
+      function batalTahapStokBawa() {
+        ruteAktif = null;
+        document.getElementById('stok-bawa-section').classList.add('hidden');
+        document.getElementById('atur-jalur-section').classList.remove('hidden');
+        tampilStickyBottom('jalur');
+        document.getElementById('btn-header-back').onclick = kembaliKePilihToko;
+        if (mapJalur) setTimeout(() => mapJalur.invalidateSize(), 100);
+      }
+
+      function triggerFotoStokBawa() {
+        const jumlah = document.getElementById('sb-jumlah').value;
+        if (!jumlah) return tampilAlert('warning', 'Data Belum Lengkap', 'Harap isi jumlah Stok Bawa.');
+        document.getElementById('sb-input-kamera').click();
+      }
+
+      function prosesFotoStokBawa(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const canvas = document.getElementById('sb-canvas-foto'); const context = canvas.getContext('2d'); const reader = new FileReader();
+        reader.onload = function(e) {
+          sbOriginalImage.onload = function() {
+            const maxWidth = 800; const scaleSize = maxWidth / sbOriginalImage.width;
+            canvas.width = maxWidth; canvas.height = sbOriginalImage.height * scaleSize;
+            context.drawImage(sbOriginalImage, 0, 0, canvas.width, canvas.height);
+            sbTimestamp = new Date().toLocaleString('id-ID');
+            document.getElementById('sb-timestamp-text').textContent = "Waktu foto: " + sbTimestamp;
+
+            sbCetakWatermark();
+
+            document.getElementById('stok-bawa-form').classList.add('hidden');
+            document.getElementById('stok-bawa-result').classList.remove('hidden');
+            tampilStickyBottom('stok-bawa-konfirmasi');
+          };
+          sbOriginalImage.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function sbCetakWatermark() {
+        const canvas = document.getElementById('sb-canvas-foto'); const ctx = canvas.getContext('2d');
+        ctx.drawImage(sbOriginalImage, 0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; const rectHeight = 110; ctx.fillRect(0, canvas.height - rectHeight, canvas.width, rectHeight);
+        ctx.font = "bold 16px sans-serif"; ctx.fillStyle = "#FFD700"; let startY = canvas.height - 80; let lineGap = 22;
+
+        const jumlah = document.getElementById('sb-jumlah').value;
+        const now = new Date();
+
+        ctx.fillText(`${formatTanggalIndo(now)}, ${formatJamIndo(now)}`, 15, startY);
+        ctx.fillText(`STOK BAWA : ${jumlah} butir`, 15, startY + lineGap);
+      }
+
+      async function selesaikanStokBawa() {
+        const btn = document.getElementById('btn-lanjut-stok-bawa');
+        tampilLoadingTombol(btn);
+
+        ruteAktif.stokBawa = parseInt(document.getElementById('sb-jumlah').value, 10) || 0;
+        simpanRuteAktif();
+
+        const dataUrl = kompresCanvasKeDataUrl(document.getElementById('sb-canvas-foto'), 400);
+        const namaFile = `STOK-BAWA_${Date.now()}.jpg`;
+        const teksPesan = `*Stok Bawa - ${formatTanggalIndo(new Date())}*\n${ruteAktif.stokBawa} butir`;
+        const dibagikan = await bagikanFotoKeWA(dataUrl, namaFile, teksPesan);
+        if (!dibagikan) simpanFotoKeDevice(dataUrl, namaFile);
+
+        sembunyikanLoadingTombol(btn);
+        document.getElementById('stok-bawa-section').classList.add('hidden');
+        tampilAlert('success', 'Stok Bawa Tersimpan', 'Rute dikunci dan siap dimulai.', () => tampilkanDashboard());
+      }
+
+      // ===== TAHAP 3: DASHBOARD RUTE AKTIF =====
+
+      function tampilkanDashboard() {
+        document.getElementById('pilih-rute-section').classList.add('hidden');
+        document.getElementById('atur-jalur-section').classList.add('hidden');
+        document.getElementById('dashboard-rute-section').classList.remove('hidden');
+        document.getElementById('rekap-section').classList.add('hidden');
+        tampilStickyBottom('dashboard');
+        document.getElementById('btn-header-back').onclick = () => location.href = 'index.html';
+        renderDashboardRute();
+      }
+
+      function renderDashboardRute() {
+        const container = document.getElementById('daftar-rute-aktif');
+        container.innerHTML = "";
+
+        const jumlahSektor = Math.ceil(ruteAktif.stops.length / UKURAN_SEKTOR);
+        for (let s = 0; s < jumlahSektor; s++) {
+          const awal = s * UKURAN_SEKTOR;
+          const stopsSektor = ruteAktif.stops.slice(awal, awal + UKURAN_SEKTOR);
+          const warnaSektor = SEKTOR_WARNA[s % SEKTOR_WARNA.length];
+
+          const box = document.createElement('div');
+          box.className = 'sektor-box';
+
+          const sisaBelum = stopsSektor.filter(t => t.status === 'belum').length;
+
+          const heading = document.createElement('div');
+          heading.className = 'sektor-heading';
+          heading.style.background = warnaSektor;
+          heading.innerHTML = `<span class="sektor-nama">Sektor ${s + 1}</span><span class="sektor-count">${sisaBelum} dari ${stopsSektor.length} tersisa</span>`;
+          box.appendChild(heading);
+
+          const body = document.createElement('div');
+          body.className = 'sektor-body';
+
+          stopsSektor.forEach((t, i) => {
+            const nomorUrut = awal + i + 1;
+            const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${t.lat},${t.lng}&travelmode=driving&dir_action=navigate`;
+            const labelTutup = t.status === 'tutup' ? `<span class="stop-tutup-label">Tutup</span>` : '';
+            const card = document.createElement('div');
+            card.className = `route-stop-card status-${t.status}`;
+            card.onclick = () => bukaAksiToko(t.id);
+            card.innerHTML = `
+              <span class="stop-badge" style="background:${warnaSektor};">${nomorUrut}</span>
+              <span class="stop-nama">${t.nama}</span>
+              ${labelTutup}
+              <a href="${navUrl}" target="_blank" class="stop-nav-btn" onclick="event.stopPropagation()" aria-label="Navigasi ke toko ini">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              </a>
+            `;
+            body.appendChild(card);
+          });
+
+          const belumSelesai = stopsSektor.filter(t => t.status === 'belum');
+          const urlSektor = buatUrlGmapsSektor(belumSelesai);
+          const tombolJalur = urlSektor
+            ? `<a href="${urlSektor}" target="_blank" class="btn-buka-jalur" style="background:${warnaSektor};">
+                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                 Buka Jalur Sektor ${s + 1}
+               </a>`
+            : `<span class="btn-buka-jalur selesai">Sektor ${s + 1} Selesai Semua</span>`;
+          body.insertAdjacentHTML('beforeend', tombolJalur);
+
+          box.appendChild(body);
+          container.appendChild(box);
+        }
+      }
+
+      // Tanpa origin -> Google Maps otomatis pakai lokasi HP sekarang sebagai titik awal.
+      // dir_action=navigate -> langsung masuk mode navigasi, tidak berhenti di layar preview rute.
+      function buatUrlGmapsSektor(stops) {
+        if (stops.length === 0) return null;
+        const destination = stops[stops.length - 1];
+        const tengah = stops.slice(0, -1).map(t => `${t.lat},${t.lng}`).join('|');
+        let url = `https://www.google.com/maps/dir/?api=1&destination=${destination.lat},${destination.lng}&travelmode=driving&dir_action=navigate`;
+        if (tengah) url += `&waypoints=${tengah}`;
+        return url;
+      }
+
+      // ===== MODAL AKSI TOKO (Laporkan / Toko Tutup) =====
+
+      function bukaAksiToko(stopId) {
+        const stop = ruteAktif.stops.find(t => t.id === stopId);
+        if (!stop) return;
+        stopAktifId = stopId;
+        document.getElementById('aksi-toko-nama').textContent = stop.nama;
+        document.getElementById('modal-aksi-toko').classList.add('show');
+      }
+
+      function tutupAksiToko() {
+        document.getElementById('modal-aksi-toko').classList.remove('show');
+      }
+
+      // ===== LAPORKAN KUNJUNGAN (embed alur Laporan Satuan per stop rute) =====
+
+      let rlTokoDetail = { nama: "", telurDiWarung: 0, keteranganTerakhir: "" };
+      let rlKeteranganTouched = false;
+      let rlOriginalImage = new Image();
+      let rlTimestamp = "";
+
+      function mulaiLaporanRute() {
+        tutupAksiToko();
+        rlKeteranganTouched = false;
+        document.getElementById('rl-keterangan').value = "";
+        document.getElementById('rl-status-input').value = "";
+        document.getElementById('rl-status-val').value = "";
+        document.getElementById('rl-input-restock-container').classList.add('hidden');
+        document.getElementById('rl-jumlah-restock').value = "";
+        document.getElementById('rl-sisa-telur').value = "";
+        document.getElementById('rl-total-setoran').value = "";
+        document.getElementById('rl-result-container').classList.add('hidden');
+        document.getElementById('rl-konfirmasi-section').classList.add('hidden');
+        document.getElementById('rl-form-lanjutan').classList.remove('hidden');
+        rlTampilTombol('ambil-foto');
+
+        document.getElementById('modal-laporan').classList.add('show');
+
+        jalankanFetchAPI('getDetailToko', { storeId: stopAktifId }).then(res => {
+          if (!res.success) return tampilAlert('error', 'Gagal', res.message || 'Gagal mengambil detail toko.');
+          rlTokoDetail = res.data;
+          document.getElementById('rl-detail-nama').textContent = rlTokoDetail.nama;
+          document.getElementById('rl-detail-telur').textContent = `${rlTokoDetail.telurDiWarung} butir`;
+          document.getElementById('rl-detail-keterangan').textContent = rlTokoDetail.keteranganTerakhir || '-';
+
+          const preview = document.getElementById('rl-keterangan-lama-preview');
+          if (rlTokoDetail.keteranganTerakhir) {
+            preview.textContent = `(Keterangan sebelumnya: ${rlTokoDetail.keteranganTerakhir})`;
+            preview.classList.remove('hidden');
+          } else {
+            preview.classList.add('hidden');
+          }
+        }).catch(() => tampilAlert('error', 'Error API', 'Gagal memuat detail toko.'));
+      }
+
+      function tutupModalLaporan() {
+        document.getElementById('modal-laporan').classList.remove('show');
+      }
+
+      function rlTampilTombol(mode) {
+        document.getElementById('rl-btn-ambil-foto').classList.toggle('hidden', mode !== 'ambil-foto');
+        document.getElementById('rl-btn-konfirmasi-group').classList.toggle('hidden', mode !== 'konfirmasi');
+      }
+
+      function rlOnKeteranganInput() {
+        rlKeteranganTouched = true;
+        document.getElementById('rl-keterangan-lama-preview').classList.add('hidden');
+      }
+
+      function rlKalkulasiSetoranOtomatis() {
+        const inputSisa = document.getElementById('rl-sisa-telur').value;
+        const inputSetoran = document.getElementById('rl-total-setoran');
+        if (inputSisa !== "") {
+          let sisa = parseInt(inputSisa, 10) || 0;
+          let estimasi = Math.max(0, (rlTokoDetail.telurDiWarung - sisa)) * 3500;
+          inputSetoran.value = estimasi.toString();
+          formatRupiahInput(inputSetoran);
+        }
+      }
+
+      function rlTriggerKamera() {
+        const sisa = document.getElementById('rl-sisa-telur').value;
+        const setoran = document.getElementById('rl-total-setoran').value;
+        const status = document.getElementById('rl-status-val').value;
+        const jumlahRestock = document.getElementById('rl-jumlah-restock').value;
+        if (!sisa || !setoran || !status) return tampilAlert('warning', 'Data Belum Lengkap', 'Harap lengkapi Sisa Telur, Setoran, dan Status.');
+        if (status === 'Restock' && !jumlahRestock) return tampilAlert('warning', 'Data Belum Lengkap', 'Harap isi Jumlah Restock.');
+        document.getElementById('rl-input-kamera').click();
+      }
+
+      function rlProsesFoto(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const canvas = document.getElementById('rl-canvas-foto'); const context = canvas.getContext('2d'); const reader = new FileReader();
+        reader.onload = function(e) {
+          rlOriginalImage.onload = function() {
+            const maxWidth = 800; const scaleSize = maxWidth / rlOriginalImage.width;
+            canvas.width = maxWidth; canvas.height = rlOriginalImage.height * scaleSize;
+            context.drawImage(rlOriginalImage, 0, 0, canvas.width, canvas.height);
+            rlTimestamp = new Date().toLocaleString('id-ID');
+            document.getElementById('rl-timestamp-text').textContent = "Waktu foto: " + rlTimestamp;
+            document.getElementById('rl-result-container').classList.remove('hidden');
+            document.getElementById('rl-form-lanjutan').classList.add('hidden');
+            rlTampilkanKonfirmasi();
+          };
+          rlOriginalImage.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function rlCetakWatermark() {
+        const canvas = document.getElementById('rl-canvas-foto'); const ctx = canvas.getContext('2d');
+        ctx.drawImage(rlOriginalImage, 0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; const rectHeight = 150; ctx.fillRect(0, canvas.height - rectHeight, canvas.width, rectHeight);
+        ctx.font = "bold 16px sans-serif"; ctx.fillStyle = "#FFD700"; let startY = canvas.height - 125; let lineGap = 22;
+
+        const status = document.getElementById('rl-status-val').value;
+        const sisa = document.getElementById('rl-sisa-telur').value;
+        const setoran = document.getElementById('rl-total-setoran').value;
+
+        ctx.fillText(`WAKTU : ${rlTimestamp}`, 15, startY);
+        ctx.fillText(`TOKO  : ${rlTokoDetail.nama}`, 15, startY + lineGap);
+        ctx.fillText(`SISA  : ${sisa} btr | UANG: ${setoran}`, 15, startY + (lineGap * 2));
+        ctx.fillText(`STAT  : ${status}`, 15, startY + (lineGap * 3));
+      }
+
+      function rlTampilkanKonfirmasi() {
+        const sisa = document.getElementById('rl-sisa-telur').value;
+        const setoran = document.getElementById('rl-total-setoran').value;
+        const status = document.getElementById('rl-status-val').value;
+        const restock = document.getElementById('rl-jumlah-restock').value;
+        let keteranganTeks = document.getElementById('rl-keterangan').value || "-";
+
+        let statusTeks = status; if (status === 'Restock') statusTeks += ` (${restock} butir)`;
+
+        document.getElementById('rl-summary-box-content').innerHTML = `
+          <p><strong>Waktu:</strong> ${rlTimestamp}</p><p><strong>Toko:</strong> ${rlTokoDetail.nama}</p>
+          <p><strong>Sisa Telur:</strong> ${sisa} butir</p><p><strong>Setoran:</strong> ${setoran}</p>
+          <p><strong>Status:</strong> ${statusTeks}</p><p><strong>Keterangan:</strong> ${keteranganTeks}</p>
+        `;
+        rlCetakWatermark();
+        document.getElementById('rl-konfirmasi-section').classList.remove('hidden');
+        rlTampilTombol('konfirmasi');
+      }
+
+      function rlEditFormulir() {
+        document.getElementById('rl-konfirmasi-section').classList.add('hidden');
+        document.getElementById('rl-result-container').classList.add('hidden');
+        document.getElementById('rl-form-lanjutan').classList.remove('hidden');
+        rlTampilTombol('ambil-foto');
+      }
+
+      function rlEksekusiKirim() {
+        const btnKirim = document.querySelector('#rl-btn-konfirmasi-group .btn-success');
+        tampilLoadingTombol(btnKirim);
+
+        setTimeout(() => {
+          try {
+            const fotoBase64 = kompresCanvasKeDataUrl(document.getElementById('rl-canvas-foto'));
+
+            let setoranMurni = parseInt(document.getElementById('rl-total-setoran').value.replace(/[^0-9]/g, ''), 10) || 0;
+            let status = document.getElementById('rl-status-val').value;
+            let sisaTelurAngka = parseInt(document.getElementById('rl-sisa-telur').value, 10) || 0;
+            let restockAngka = (status === 'Restock') ? (parseInt(document.getElementById('rl-jumlah-restock').value, 10) || 0) : 0;
+
+            let payload = {
+              storeId: stopAktifId,
+              sisaTelur: sisaTelurAngka,
+              totalSetoran: setoranMurni,
+              status: status,
+              jumlahRestock: restockAngka,
+              keterangan: document.getElementById('rl-keterangan').value,
+              keteranganTouched: rlKeteranganTouched,
+              timestamp: rlTimestamp,
+              fotoBase64: fotoBase64
+            };
+
+            jalankanFetchAPI('submitLaporanSatuan', payload).then(res => {
+              sembunyikanLoadingTombol(btnKirim);
+              if (res.success) {
+                const stop = ruteAktif.stops.find(t => t.id === stopAktifId);
+                if (stop) {
+                  stop.status = 'dilapor';
+                  stop.setoran = setoranMurni;
+                  stop.restock = restockAngka;
+                  stop.sisaTelur = sisaTelurAngka;
+                  simpanRuteAktif();
+                }
+                tutupModalLaporan();
+                renderDashboardRute();
+                tampilAlert('success', 'Berhasil', res.message);
+              } else {
+                tampilAlert('error', 'Gagal', res.message || 'Terjadi kesalahan.');
+              }
+            }).catch(err => {
+              sembunyikanLoadingTombol(btnKirim);
+              tampilAlert('error', 'Koneksi Gagal', err.message || 'Gagal mengirim laporan ke server.');
+            });
+          } catch (err) {
+            sembunyikanLoadingTombol(btnKirim);
+            tampilAlert('error', 'Gagal Memproses', err.message || 'Terjadi kesalahan saat menyiapkan data.');
+          }
+        }, 50);
+      }
+
+      // ===== TOKO TUTUP (foto watermark besar, simpan lokal ke device, tanpa kirim server) =====
+
+      function mulaiTokoTutup() {
+        tutupAksiToko();
+        document.getElementById('input-kamera-tutup').click();
+      }
+
+      function prosesFotoTutup(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const stop = ruteAktif.stops.find(t => t.id === stopAktifId);
+        if (!stop) { event.target.value = ""; return; }
+
+        document.getElementById('loading-overlay').classList.remove('hidden');
+        document.getElementById('loading-text').textContent = "Memproses Foto...";
+        document.getElementById('loading-sub').textContent = "Menambahkan watermark.";
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const img = new Image();
+          img.onload = function() {
+            try {
+              const canvas = document.createElement('canvas');
+              const maxWidth = 1000;
+              const scale = maxWidth / img.width;
+              canvas.width = maxWidth;
+              canvas.height = img.height * scale;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+              const now = new Date();
+              ctx.fillStyle = 'rgba(0,0,0,0.65)';
+              const tinggiBox = 130;
+              ctx.fillRect(0, canvas.height - tinggiBox, canvas.width, tinggiBox);
+              ctx.fillStyle = '#FFFFFF';
+              ctx.font = 'bold 30px sans-serif';
+              ctx.fillText(stop.nama, 20, canvas.height - 85);
+              ctx.font = 'bold 20px sans-serif';
+              ctx.fillText(formatTanggalIndo(now), 20, canvas.height - 50);
+              ctx.fillText(formatJamIndo(now), 20, canvas.height - 22);
+
+              ctx.textAlign = 'right';
+              ctx.fillStyle = '#EF4444';
+              ctx.font = 'bold 34px sans-serif';
+              ctx.fillText('TUTUP', canvas.width - 20, canvas.height - tinggiBox / 2 + 12);
+              ctx.textAlign = 'left';
+
+              // Simpan hasilnya dulu, JANGAN langsung share di sini -- event kamera (input
+              // capture) tidak membawa user-gesture di kebanyakan browser Android, jadi
+              // navigator.share() bakal ditolak diam-diam kalau dipanggil otomatis di titik
+              // ini. Tampilkan preview + tombol "Bagikan ke WhatsApp" supaya share dipicu
+              // dari tap tombol langsung (gesture segar), sama seperti Stok Bawa/Kirim Laporan.
+              tutupDataUrl = kompresCanvasKeDataUrl(canvas, 400);
+              tutupNamaFile = `TOKO-TUTUP_${stop.nama}_${now.getTime()}.jpg`;
+              tutupTeksPesan = `${stop.nama} - Tutup - ${formatTanggalIndo(now)}`;
+              tutupStopRef = stop;
+
+              const preview = document.getElementById('tutup-canvas-preview');
+              preview.width = canvas.width;
+              preview.height = canvas.height;
+              preview.getContext('2d').drawImage(canvas, 0, 0);
+
+              document.getElementById('loading-overlay').classList.add('hidden');
+              document.getElementById('modal-tutup-preview').classList.add('show');
+            } catch (err) {
+              document.getElementById('loading-overlay').classList.add('hidden');
+              tampilAlert('error', 'Gagal Memproses', err.message || 'Terjadi kesalahan saat memproses foto.');
+            }
+          };
+          img.onerror = function() {
+            document.getElementById('loading-overlay').classList.add('hidden');
+            tampilAlert('error', 'Gagal', 'Foto tidak bisa dibaca.');
+          };
+          img.src = e.target.result;
+        };
+        reader.onerror = function() {
+          document.getElementById('loading-overlay').classList.add('hidden');
+          tampilAlert('error', 'Gagal', 'Foto tidak bisa dibaca dari perangkat.');
+        };
+        reader.readAsDataURL(file);
+        event.target.value = "";
+      }
+
+      async function bagikanFotoTutupSekarang() {
+        const btn = document.getElementById('btn-bagikan-tutup');
+        tampilLoadingTombol(btn);
+        const dibagikan = await bagikanFotoKeWA(tutupDataUrl, tutupNamaFile, tutupTeksPesan);
+        if (!dibagikan) simpanFotoKeDevice(tutupDataUrl, tutupNamaFile);
+        sembunyikanLoadingTombol(btn);
+        selesaikanTokoTutup();
+      }
+
+      function selesaikanTokoTutup() {
+        const stop = tutupStopRef;
+        document.getElementById('modal-tutup-preview').classList.remove('show');
+        stop.status = 'tutup';
+        simpanRuteAktif();
+        renderDashboardRute();
+        // Sengaja tanpa alert/toast di sini -- popup preview yang barusan ditutup sudah
+        // cukup jadi konfirmasi visual, tidak perlu popup lagi setelahnya.
+        tutupDataUrl = null;
+        tutupNamaFile = null;
+        tutupTeksPesan = null;
+        tutupStopRef = null;
+      }
+
+      // ===== TAHAP 4: REKAP RUTE =====
+
+      function hitungRekap() {
+        let totalSetoran = 0, totalRestock = 0, totalSisaTelur = 0;
+        const tokoTutup = [];
+        ruteAktif.stops.forEach(s => {
+          if (s.status === 'dilapor') {
+            totalSetoran += s.setoran;
+            totalRestock += s.restock;
+            totalSisaTelur += s.sisaTelur;
+          } else if (s.status === 'tutup') {
+            tokoTutup.push(s.nama);
+          }
+        });
+        const telurAwal = ruteAktif.stokBawa || 0;
+        const sisaTelurBaru = telurAwal - totalRestock;
+        const totalTokoDikunjungi = ruteAktif.stops.length; // jumlah toko yang masuk list sektor rute ini
+        return { totalSetoran, totalRestock, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi };
+      }
+
+      function tampilkanRekap() {
+        document.getElementById('dashboard-rute-section').classList.add('hidden');
+        document.getElementById('rekap-section').classList.remove('hidden');
+        tampilStickyBottom('rekap');
+        document.getElementById('btn-header-back').onclick = kembaliKeDashboard;
+        window.scrollTo(0, 0);
+
+        document.getElementById('rekap-tanggal-lock').textContent = formatTanggalIndo(new Date(ruteAktif.createdAt));
+
+        const { totalSetoran, totalRestock, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi } = hitungRekap();
+        document.getElementById('rekap-toko-dikunjungi-teks').textContent = `Toko Dikunjungi : ${totalTokoDikunjungi}`;
+        document.getElementById('rekap-telur-awal').textContent = `${telurAwal} btr`;
+        document.getElementById('rekap-restock').textContent = `${totalRestock} btr`;
+        document.getElementById('rekap-sisa-baru').textContent = `${sisaTelurBaru} btr`;
+        document.getElementById('rekap-sisa').textContent = `${totalSisaTelur} btr`;
+        document.getElementById('rekap-setoran').textContent = formatRupiah(totalSetoran);
+        document.getElementById('rekap-tutup').textContent = tokoTutup.length;
+
+        const box = document.getElementById('rekap-tokotutup-box');
+        const isi = document.getElementById('rekap-tokotutup-isi');
+        if (tokoTutup.length > 0) {
+          isi.innerHTML = tokoTutup.map((n, i) => `<p>${i + 1}. ${n}</p>`).join('');
+          box.classList.remove('hidden');
+        } else {
+          box.classList.add('hidden');
+        }
+      }
+
+      function kembaliKeDashboard() {
+        document.getElementById('rekap-section').classList.add('hidden');
+        document.getElementById('dashboard-rute-section').classList.remove('hidden');
+        tampilStickyBottom('dashboard');
+        document.getElementById('btn-header-back').onclick = () => location.href = 'index.html';
+        window.scrollTo(0, 0);
+      }
+
+      async function kirimLaporanWA() {
+        const btn = document.getElementById('btn-kirim-laporan');
+        tampilLoadingTombol(btn);
+
+        const tanggal = formatTanggalIndo(new Date(ruteAktif.createdAt));
+        const { totalSetoran, totalRestock, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi } = hitungRekap();
+
+        let teks = `*REKAP RUTE - ${tanggal}*\n\n`;
+        teks += `Toko Dikunjungi: ${totalTokoDikunjungi}\n`;
+        teks += `Telur Awal: ${telurAwal} butir\n`;
+        teks += `Telur Keluar (Restock): ${totalRestock} butir\n`;
+        teks += `Sisa Telur Baru: ${sisaTelurBaru} butir\n`;
+        teks += `Telur Retur: ${totalSisaTelur} butir\n`;
+        teks += `Total Setoran: ${formatRupiah(totalSetoran)}\n`;
+        teks += `Toko Tutup: ${tokoTutup.length}\n`;
+        if (tokoTutup.length > 0) {
+          teks += `\nDaftar Toko Tutup:\n`;
+          tokoTutup.forEach((nama, i) => { teks += `${i + 1}. ${nama}\n`; });
+        }
+
+        try {
+          // Tombol Kirim Laporan sendiri dikecualikan dari screenshot -- cuma ringkasan rekap
+          // yang perlu tertangkap, tombolnya sedang dalam status loading kalau ikut kefoto.
+          const canvas = await html2canvas(document.getElementById('rekap-section'), {
+            backgroundColor: '#ffffff',
+            ignoreElements: (el) => el.id === 'btn-kirim-laporan'
+          });
+          const dataUrl = kompresCanvasKeDataUrl(canvas, 500);
+          const namaFile = `REKAP-RUTE_${Date.now()}.jpg`;
+          const dibagikan = await bagikanFotoKeWA(dataUrl, namaFile, teks);
+          if (!dibagikan) {
+            simpanFotoKeDevice(dataUrl, namaFile);
+            // clipboard.writeText bisa menggantung tanpa resolve/reject sama sekali kalau izin
+            // clipboard belum diberikan (bukan cuma gagal) -- dibatasi waktu biar tombol tidak macet.
+            await Promise.race([
+              navigator.clipboard.writeText(teks).catch(() => {}),
+              new Promise(resolve => setTimeout(resolve, 3000))
+            ]);
+            tampilAlert('success', 'Laporan Disimpan', 'Screenshot rekap disimpan ke perangkat & teks pesan disalin, siap ditempel manual ke WhatsApp.');
+          } else {
+            tampilAlert('success', 'Berhasil Dibagikan', 'Laporan rekap sudah dibagikan.');
+          }
+        } catch (err) {
+          tampilAlert('error', 'Gagal Membuat Laporan', err.message || 'Terjadi kesalahan saat membuat screenshot rekap.');
+        } finally {
+          sembunyikanLoadingTombol(btn);
+        }
+      }
+
+      function akhiriRute() {
+        tampilConfirm('Akhiri Rute?', 'Data rute aktif di HP ini akan dihapus permanen. Yakin sudah selesai?', () => {
+          localStorage.removeItem(STORAGE_KEY);
+          ruteAktif = null;
+          urutanRute = [];
+          urutanTerpilih = [];
+          document.getElementById('jumlah-toko-terpilih').textContent = 'Terpilih : 0';
+          document.getElementById('rekap-section').classList.add('hidden');
+          tampilkanPilihToko();
+          terapkanFilterDanRender();
+          if (mapPilih) renderMarkerPilih(true);
+        });
+      }
+    </script>
+  </body>
+</html>

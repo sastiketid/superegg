@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Super Eggo V2 - Laporan Satuan (Sandbox)</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="stylesheet" href="shared/style.css">
+    <style>
+      .toko-detail-box { background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
+      .detail-row { padding: 10px 14px; border-bottom: 1px solid #DDE3FC; }
+      .detail-row:last-child { border-bottom: none; }
+      .detail-label { display: block; font-size: 11px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
+      .detail-value { display: block; font-size: 14.5px; font-weight: 600; color: var(--text-main); word-break: break-word; }
+      .keterangan-lama-preview { font-size: 12px; color: var(--text-muted); margin: 6px 0 0 0; font-style: italic; }
+
+      .toko-tap-list { max-height: 65vh; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 12px; background: #F9FAFB; }
+      .toko-tap-item { padding: 14px 16px; border-bottom: 1px solid #E5E7EB; cursor: pointer; font-size: 14.5px; font-weight: 600; background: #FFF; }
+      .toko-tap-item:last-child { border-bottom: none; }
+      .toko-tap-item:active { background-color: #EEF2FF; }
+      .toko-tap-empty { text-align: center; color: var(--text-muted); padding: 24px 0; font-size: 13.5px; }
+    </style>
+  </head>
+  <body>
+
+    <div id="custom-alert" class="modal-overlay">
+      <div class="modal-content">
+        <div id="alert-icon" class="modal-icon"></div>
+        <h3 id="alert-title" class="modal-title">Info</h3>
+        <p id="alert-text" class="modal-text">Pesan</p>
+        <button onclick="tutupAlert()" class="btn-primary" id="alert-btn">Mengerti</button>
+      </div>
+    </div>
+
+    <div class="container">
+
+      <div class="feature-header">
+        <button class="btn-back-icon" id="btn-header-back" onclick="location.href='index.html'" aria-label="Kembali">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2>Laporan Satuan</h2>
+        <span class="badge-sandbox-mini">Sandbox</span>
+      </div>
+
+      <div class="scroll-area has-sticky-bottom">
+
+      <div id="pilih-toko-section">
+        <div class="form-group">
+          <label>Cari Toko:</label>
+          <div class="search-wrapper">
+            <input type="text" id="cari-toko-input" placeholder="Memuat daftar toko..." oninput="filterDaftarToko()">
+            <button type="button" class="search-clear-btn hidden" id="cari-toko-clear" onclick="clearCariToko()" aria-label="Hapus pencarian">✕</button>
+          </div>
+        </div>
+        <p id="jumlah-toko-aktif" style="font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin: 0 0 8px 2px;">Toko Aktif : 0</p>
+        <div id="daftar-toko-list" class="toko-tap-list"></div>
+      </div>
+
+      <div id="form-section" class="hidden">
+        <div id="form-lanjutan">
+          <div class="toko-detail-box">
+            <div class="detail-row">
+              <span class="detail-label">1. Nama Toko</span>
+              <span class="detail-value" id="detail-nama">-</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">2. Telur Sebelumnya</span>
+              <span class="detail-value" id="detail-telur">-</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">3. Keterangan Terakhir</span>
+              <span class="detail-value" id="detail-keterangan">-</span>
+            </div>
+          </div>
+
+          <div class="form-group"><label>Sisa Telur (Butir):</label><input type="number" id="sisa-telur" placeholder="0" oninput="kalkulasiSetoranOtomatis()"></div>
+          <div class="form-group"><label>Total Setoran (Rp):</label><input type="text" inputmode="numeric" id="total-setoran" placeholder="0" oninput="formatRupiahInput(this)"></div>
+
+          <div class="form-group">
+            <label>Status:</label>
+            <div class="custom-select-wrapper">
+              <input type="text" id="status-input" class="custom-select-input" placeholder="-- Pilih Status --" autocomplete="off">
+              <input type="hidden" id="status-val">
+              <ul id="status-list" class="custom-select-list"></ul>
+            </div>
+          </div>
+          <div class="form-group hidden" id="input-restock-container"><label>Jumlah Restock (Butir):</label><input type="number" id="jumlah-restock" placeholder="0"></div>
+
+          <div class="form-group">
+            <label>Keterangan:</label>
+            <textarea id="keterangan" rows="2" placeholder="Catatan tambahan..." oninput="onKeteranganInput()"></textarea>
+            <p class="keterangan-lama-preview hidden" id="keterangan-lama-preview"></p>
+          </div>
+        </div>
+
+        <div id="result-container" class="hidden">
+          <canvas id="canvas-foto"></canvas>
+          <p id="timestamp-text" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 0;"></p>
+          <button id="btn-ulangi-foto" class="btn-secondary" style="margin-top:0;" onclick="document.getElementById('input-kamera').click()">Ulangi Foto Saja</button>
+        </div>
+
+        <div id="konfirmasi-section" class="hidden">
+          <h3 style="text-align:center; color: var(--warning-hover);">Cek Kembali Data!</h3>
+          <div class="summary-box" id="summary-box-content"></div>
+        </div>
+
+        <input type="file" id="input-kamera" accept="image/*" capture="environment" class="hidden" onchange="prosesFoto(event)">
+      </div>
+
+      </div>
+
+    </div>
+
+    <div class="sticky-bottom hidden">
+      <div class="sticky-bottom-inner">
+        <button class="btn-danger hidden" id="btn-ambil-foto" onclick="triggerKamera()">Ambil Foto &amp; Lanjut Review</button>
+        <div class="dual-btn hidden" id="btn-konfirmasi-group">
+          <button class="btn-secondary" onclick="editFormulir()">Batal &amp; Edit</button>
+          <button class="btn-success" onclick="eksekusiKirim()">Kirim Final</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="shared/app.js"></script>
+    <script>
+      let currentTimestamp = "";
+      let originalImage = new Image();
+      let tokoDetailAktif = { nama: "", pemilik: "", telurDiWarung: 0, keteranganTerakhir: "" };
+      let keteranganTouched = false;
+      let daftarTokoAktif = [];
+      let storeIdAktif = "";
+      let dropdownData = { 'status': [] };
+
+      document.addEventListener("DOMContentLoaded", () => {
+        dropdownData['status'] = [ {label: "Restock", value: "Restock"}, {label: "Stop", value: "Stop"} ];
+
+        initCustomDropdown('status', (val) => {
+          if (val === 'Restock') document.getElementById('input-restock-container').classList.remove('hidden');
+          else { document.getElementById('input-restock-container').classList.add('hidden'); document.getElementById('jumlah-restock').value = ''; }
+        });
+
+        muatDaftarToko();
+      });
+
+      function muatDaftarToko() {
+        document.getElementById('cari-toko-input').value = "";
+        jalankanFetchAPI('getDaftarTokoAktif').then(res => {
+          document.getElementById('cari-toko-input').placeholder = "Cari nama toko...";
+          daftarTokoAktif = res || [];
+          renderDaftarToko(daftarTokoAktif);
+        }).catch(err => {
+          document.getElementById('cari-toko-input').placeholder = "Gagal memuat";
+          tampilAlert('error', 'Koneksi Gagal', 'Gagal mengambil daftar toko dari server.');
+        });
+      }
+
+      function renderDaftarToko(daftar) {
+        const container = document.getElementById('daftar-toko-list');
+        container.innerHTML = "";
+        document.getElementById('jumlah-toko-aktif').textContent = `Toko Aktif : ${daftar.length}`;
+
+        if (daftar.length === 0) {
+          container.innerHTML = '<div class="toko-tap-empty">Tidak ada toko ditemukan.</div>';
+          return;
+        }
+
+        daftar.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'toko-tap-item';
+          item.textContent = t.nama;
+          item.onclick = () => pilihToko(t.id);
+          container.appendChild(item);
+        });
+      }
+
+      function filterDaftarToko() {
+        const input = document.getElementById('cari-toko-input');
+        document.getElementById('cari-toko-clear').classList.toggle('hidden', input.value === '');
+        const q = input.value.toLowerCase();
+        const hasil = daftarTokoAktif.filter(t => t.nama.toLowerCase().includes(q));
+        renderDaftarToko(hasil);
+      }
+
+      function clearCariToko() {
+        const input = document.getElementById('cari-toko-input');
+        input.value = '';
+        filterDaftarToko();
+        input.focus();
+      }
+
+      function pilihToko(storeId) {
+        storeIdAktif = storeId;
+
+        keteranganTouched = false;
+        document.getElementById('keterangan').value = "";
+        document.getElementById('status-input').value = "";
+        document.getElementById('status-val').value = "";
+        document.getElementById('input-restock-container').classList.add('hidden');
+        document.getElementById('jumlah-restock').value = "";
+        document.getElementById('sisa-telur').value = "";
+        document.getElementById('total-setoran').value = "";
+        document.getElementById('result-container').classList.add('hidden');
+        document.getElementById('konfirmasi-section').classList.add('hidden');
+
+        document.getElementById('pilih-toko-section').classList.add('hidden');
+        document.getElementById('form-section').classList.remove('hidden');
+        document.getElementById('form-lanjutan').classList.remove('hidden');
+        tampilStickyBottom('ambil-foto');
+        document.getElementById('btn-header-back').onclick = kembaliKeDaftarToko;
+        window.scrollTo(0, 0);
+
+        jalankanFetchAPI('getDetailToko', { storeId: storeId }).then(res => {
+          if (!res.success) return tampilAlert('error', 'Gagal', res.message || 'Gagal mengambil detail toko.');
+
+          tokoDetailAktif = res.data;
+          document.getElementById('detail-nama').textContent = tokoDetailAktif.nama;
+          document.getElementById('detail-telur').textContent = `${tokoDetailAktif.telurDiWarung} butir`;
+          document.getElementById('detail-keterangan').textContent = tokoDetailAktif.keteranganTerakhir || '-';
+
+          const preview = document.getElementById('keterangan-lama-preview');
+          if (tokoDetailAktif.keteranganTerakhir) {
+            preview.textContent = `(Keterangan sebelumnya: ${tokoDetailAktif.keteranganTerakhir})`;
+            preview.classList.remove('hidden');
+          } else {
+            preview.classList.add('hidden');
+          }
+        }).catch(err => tampilAlert('error', 'Error API', 'Gagal memuat detail toko.'));
+      }
+
+      function kembaliKeDaftarToko() {
+        storeIdAktif = "";
+        document.getElementById('form-section').classList.add('hidden');
+        document.getElementById('pilih-toko-section').classList.remove('hidden');
+        tampilStickyBottom('none');
+        document.getElementById('btn-header-back').onclick = () => location.href = 'index.html';
+        window.scrollTo(0, 0);
+      }
+
+      function tampilStickyBottom(mode) {
+        const bar = document.querySelector('.sticky-bottom');
+        const btnFoto = document.getElementById('btn-ambil-foto');
+        const btnKonfirmasi = document.getElementById('btn-konfirmasi-group');
+        bar.classList.toggle('hidden', mode === 'none');
+        btnFoto.classList.toggle('hidden', mode !== 'ambil-foto');
+        btnKonfirmasi.classList.toggle('hidden', mode !== 'konfirmasi');
+      }
+
+      function onKeteranganInput() {
+        keteranganTouched = true;
+        const preview = document.getElementById('keterangan-lama-preview');
+        preview.classList.add('hidden');
+      }
+
+      function kalkulasiSetoranOtomatis() {
+        const inputSisa = document.getElementById('sisa-telur').value;
+        const inputSetoran = document.getElementById('total-setoran');
+        if (inputSisa !== "") {
+          let sisa = parseInt(inputSisa, 10) || 0;
+          let estimasiSetoran = Math.max(0, (tokoDetailAktif.telurDiWarung - sisa)) * 3500;
+          inputSetoran.value = estimasiSetoran.toString();
+          formatRupiahInput(inputSetoran);
+        }
+      }
+
+      function triggerKamera() {
+        const sisa = document.getElementById('sisa-telur').value;
+        const setoran = document.getElementById('total-setoran').value;
+        const status = document.getElementById('status-val').value;
+        const jumlahRestock = document.getElementById('jumlah-restock').value;
+        if (!sisa || !setoran || !status) return tampilAlert('warning', 'Data Belum Lengkap', 'Harap lengkapi Sisa Telur, Setoran, dan Status.');
+        if (status === 'Restock' && !jumlahRestock) return tampilAlert('warning', 'Data Belum Lengkap', 'Harap isi Jumlah Restock.');
+        document.getElementById('input-kamera').click();
+      }
+
+      function prosesFoto(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const canvas = document.getElementById('canvas-foto'); const context = canvas.getContext('2d'); const reader = new FileReader();
+
+        reader.onload = function(e) {
+          originalImage.onload = function() {
+            const maxWidth = 800; const scaleSize = maxWidth / originalImage.width;
+            canvas.width = maxWidth; canvas.height = originalImage.height * scaleSize;
+            context.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+            currentTimestamp = new Date().toLocaleString('id-ID');
+            document.getElementById('timestamp-text').textContent = "Waktu foto: " + currentTimestamp;
+            document.getElementById('result-container').classList.remove('hidden');
+            document.getElementById('form-lanjutan').classList.add('hidden');
+            tampilkanKonfirmasi();
+          }
+          originalImage.src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+      }
+
+      function cetakWatermark() {
+        const canvas = document.getElementById('canvas-foto'); const ctx = canvas.getContext('2d');
+        ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; const rectHeight = 150; ctx.fillRect(0, canvas.height - rectHeight, canvas.width, rectHeight);
+        ctx.font = "bold 16px sans-serif"; ctx.fillStyle = "#FFD700"; let startY = canvas.height - 125; let lineGap = 22;
+
+        const status = document.getElementById('status-val').value;
+        const sisa = document.getElementById('sisa-telur').value;
+        const setoran = document.getElementById('total-setoran').value;
+
+        ctx.fillText(`WAKTU : ${currentTimestamp}`, 15, startY);
+        ctx.fillText(`TOKO  : ${tokoDetailAktif.nama}`, 15, startY + lineGap);
+        ctx.fillText(`SISA  : ${sisa} btr | UANG: ${setoran}`, 15, startY + (lineGap * 2));
+        ctx.fillText(`STAT  : ${status}`, 15, startY + (lineGap * 3));
+      }
+
+      function tampilkanKonfirmasi() {
+        const sisa = document.getElementById('sisa-telur').value;
+        const setoran = document.getElementById('total-setoran').value;
+        const status = document.getElementById('status-val').value;
+        const restock = document.getElementById('jumlah-restock').value;
+        let keteranganTeks = document.getElementById('keterangan').value || "-";
+
+        let statusTeks = status; if (status === 'Restock') statusTeks += ` (${restock} butir)`;
+
+        document.getElementById('summary-box-content').innerHTML = `
+          <p><strong>Waktu:</strong> ${currentTimestamp}</p><p><strong>Toko:</strong> ${tokoDetailAktif.nama}</p>
+          <p><strong>Sisa Telur:</strong> ${sisa} butir</p><p><strong>Setoran:</strong> ${setoran}</p>
+          <p><strong>Status:</strong> ${statusTeks}</p><p><strong>Keterangan:</strong> ${keteranganTeks}</p>
+        `;
+        cetakWatermark();
+
+        document.getElementById('konfirmasi-section').classList.remove('hidden');
+        tampilStickyBottom('konfirmasi');
+        window.scrollTo(0, 0);
+      }
+
+      function editFormulir() {
+        document.getElementById('konfirmasi-section').classList.add('hidden');
+        document.getElementById('result-container').classList.add('hidden');
+        document.getElementById('form-lanjutan').classList.remove('hidden');
+        tampilStickyBottom('ambil-foto');
+      }
+
+      function eksekusiKirim() {
+        const btnKirim = document.querySelector('#btn-konfirmasi-group .btn-success');
+        tampilLoadingTombol(btnKirim);
+
+        // beri browser kesempatan menggambar animasi titik dulu sebelum kompresi
+        // foto (sinkron & berat) menyumbat main thread dan bikin layar kelihatan macet.
+        setTimeout(() => {
+          try {
+            const fotoBase64 = kompresCanvasKeDataUrl(document.getElementById('canvas-foto'));
+
+            let setoranTeks = document.getElementById('total-setoran').value;
+            let setoranMurni = parseInt(setoranTeks.replace(/[^0-9]/g, ''), 10) || 0;
+            let status = document.getElementById('status-val').value;
+
+            let payload = {
+              storeId: storeIdAktif,
+              sisaTelur: parseInt(document.getElementById('sisa-telur').value, 10) || 0,
+              totalSetoran: setoranMurni,
+              status: status,
+              jumlahRestock: (status === 'Restock') ? (parseInt(document.getElementById('jumlah-restock').value, 10) || 0) : 0,
+              keterangan: document.getElementById('keterangan').value,
+              keteranganTouched: keteranganTouched,
+              timestamp: currentTimestamp,
+              fotoBase64: fotoBase64
+            };
+
+            jalankanFetchAPI('submitLaporanSatuan', payload).then(res => {
+              sembunyikanLoadingTombol(btnKirim);
+              if (res.success) {
+                tampilAlert('success', 'Berhasil', res.message, () => location.reload());
+              } else {
+                tampilAlert('error', 'Gagal', res.message || 'Terjadi kesalahan.');
+              }
+            }).catch(err => {
+              sembunyikanLoadingTombol(btnKirim);
+              tampilAlert('error', 'Koneksi Gagal', err.message || 'Gagal mengirim laporan ke server.');
+            });
+          } catch (err) {
+            sembunyikanLoadingTombol(btnKirim);
+            tampilAlert('error', 'Gagal Memproses', err.message || 'Terjadi kesalahan saat menyiapkan data.');
+          }
+        }, 50);
+      }
+    </script>
+  </body>
+</html>

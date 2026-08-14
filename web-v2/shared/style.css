@@ -1,0 +1,133 @@
+:root {
+  --primary: #4F46E5; --primary-hover: #4338CA;
+  --success: #10B981; --success-hover: #059669;
+  --warning: #F59E0B; --warning-hover: #D97706;
+  --danger: #EF4444; --danger-hover: #DC2626;
+  --secondary: #6B7280; --bg-color: #F3F4F6;
+  --card-bg: #FFFFFF; --text-main: #1F2937; --text-muted: #6B7280;
+}
+html, body { height: 100%; }
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-color); color: var(--text-main); margin: 0;
+  display: flex; justify-content: center;
+  padding: 10px; box-sizing: border-box;
+  overflow: hidden; /* halaman sendiri tidak scroll -- cuma .scroll-area yang scroll */
+}
+.container {
+  width: 100%; max-width: 420px; height: 100%;
+  background: var(--card-bg); border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+  display: flex; flex-direction: column; overflow: hidden;
+  padding: 20px 20px 0;
+  box-sizing: border-box;
+}
+
+/* Satu-satunya area yang boleh discroll per halaman -- header tetap diam di atas */
+.scroll-area { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 20px; -webkit-overflow-scrolling: touch; }
+.scroll-area.has-sticky-bottom { padding-bottom: 100px; }
+
+.header-container { text-align: center; margin-bottom: 25px; flex-shrink: 0; }
+.header-logo { width: 90px; height: 90px; border-radius: 50%; object-fit: cover; border: 3px solid #E5E7EB; margin-bottom: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: white;}
+h2 { font-size: 20px; font-weight: 800; margin: 0; color: var(--text-main); }
+.subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+.badge-sandbox { display: inline-block; margin-top: 8px; font-size: 11px; font-weight: 700; color: var(--warning-hover); background: #FEF3C7; padding: 3px 10px; border-radius: 20px; }
+
+/* Header ringkas untuk halaman fitur (bukan beranda) -- judul fitur + tombol kembali, tanpa logo/branding, tetap diam di atas */
+.feature-header { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1.5px solid #E5E7EB; flex-shrink: 0; }
+.feature-header h2 { margin: 0; flex: 1; }
+.btn-back-icon { flex-shrink: 0; width: 36px; height: 36px; padding: 0; margin: 0; border-radius: 10px; background: #F3F4F6; color: var(--secondary); border: 1.5px solid #E5E7EB; }
+.btn-back-icon:hover { background: #E5E7EB; }
+.badge-sandbox-mini { flex-shrink: 0; font-size: 10px; font-weight: 700; color: var(--warning-hover); background: #FEF3C7; padding: 3px 9px; border-radius: 20px; }
+
+button { padding: 14px; margin: 8px 0; width: 100%; font-size: 15px; cursor: pointer; border: none; border-radius: 10px; font-weight: 600; transition: all 0.2s ease; display: flex; justify-content: center; align-items: center; gap: 8px; }
+button:active { transform: scale(0.98); }
+button:disabled { background-color: #E5E7EB; cursor: not-allowed; transform: none; color: #9CA3AF; }
+.btn-primary { background-color: var(--primary); color: white; } .btn-primary:hover { background-color: var(--primary-hover); }
+.btn-secondary { background-color: var(--secondary); color: white; }
+.btn-danger { background-color: var(--danger); color: white; } .btn-danger:hover { background-color: var(--danger-hover); }
+.btn-success { background-color: var(--success); color: white; } .btn-success:hover { background-color: var(--success-hover); }
+button svg { flex-shrink: 0; }
+
+/* Tombol utama dibekukan di bawah layar, tidak ikut scroll.
+   (Riwayat: pernah dilepas ke alur dokumen biasa karena dicurigai bikin tombol Kirim Final
+   tidak menerima tap di Android Chrome -- ternyata akar masalahnya bukan di sini, tapi
+   elemen #loading-overlay yang hilang dari HTML + bug flexbox min-height di modal.
+   Setelah dua itu diperbaiki, position:fixed aman dipakai lagi.) */
+.sticky-bottom { position: fixed; bottom: 0; left: 0; right: 0; padding: 14px 15px calc(14px + env(safe-area-inset-bottom)); background: linear-gradient(to top, var(--bg-color) 65%, rgba(243,244,246,0)); z-index: 500; }
+.sticky-bottom-inner { max-width: 380px; margin: 0 auto; }
+.sticky-bottom-inner button { margin: 0; }
+
+.form-group { margin-bottom: 16px; text-align: left; }
+label { font-weight: 600; font-size: 13px; color: var(--text-muted); display: block; margin-bottom: 6px; }
+input, textarea { width: 100%; padding: 12px 14px; font-size: 15px; box-sizing: border-box; border: 1.5px solid #E5E7EB; border-radius: 10px; background-color: #F9FAFB; transition: border-color 0.2s; font-family: inherit; }
+input:focus, textarea:focus { outline: none; border-color: var(--primary); background-color: #FFF; }
+.hidden { display: none !important; }
+
+.search-wrapper { position: relative; width: 100%; }
+.search-wrapper input { padding-right: 42px; }
+.search-clear-btn {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 28px; height: 28px; margin: 0; padding: 0;
+  border-radius: 50%; background: #E5E7EB; color: var(--text-muted);
+  font-size: 14px; line-height: 1;
+}
+.search-clear-btn:hover { background: #D1D5DB; }
+
+.custom-select-wrapper { position: relative; width: 100%; }
+.custom-select-input {
+  background: #FFF url('data:image/svg+xml;utf8,<svg fill="%239CA3AF" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>') no-repeat right 14px center;
+  background-size: 18px;
+  cursor: text;
+  padding-right: 40px !important;
+}
+.custom-select-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #E5E7EB; border-radius: 10px; box-shadow: 0 10px 15px rgba(0,0,0,0.1); z-index: 1000; max-height: 220px; overflow-y: auto; list-style: none; padding: 0; margin: 5px 0 0; display: none; }
+.custom-select-list.show { display: block; }
+.custom-select-list li { padding: 12px 14px; cursor: pointer; font-size: 14px; border-bottom: 1px solid #F3F4F6; text-align: left; }
+.custom-select-list li:hover { background-color: var(--primary); color: white; }
+.custom-select-list li.no-result { color: var(--danger); cursor: not-allowed; background: white; }
+
+#canvas-foto { width: 100%; border-radius: 12px; margin-bottom: 10px; background-color: #eee; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+.summary-box { background-color: #F9FAFB; padding: 16px; border-radius: 12px; font-size: 14px; border: 1px solid #E5E7EB; margin-bottom: 15px; }
+.summary-box p { margin: 6px 0; line-height: 1.5; }
+.dual-btn { display: flex; gap: 12px; }
+
+#loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.9); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
+.spinner { border: 4px solid #E5E7EB; border-top: 4px solid var(--primary); border-radius: 50%; width: 45px; height: 45px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+#loading-text { color: var(--text-main); font-weight: 700; margin: 0; }
+
+/* Loading di dalam tombol -- label tombol berubah jadi 3 titik berlompatan selagi proses,
+   dipakai di semua tombol kirim/submit sebagai ganti overlay layar penuh. */
+.btn-loading-dots { display: inline-flex; gap: 6px; align-items: center; justify-content: center; }
+.btn-loading-dots span { width: 9px; height: 9px; border-radius: 50%; background: currentColor; animation: btn-dot-bounce 1.4s infinite ease-in-out both; }
+.btn-loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.btn-loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+@keyframes btn-dot-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.5; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 10000; opacity: 0; visibility: hidden; transition: all 0.3s ease; }
+.modal-overlay.show { opacity: 1; visibility: visible; }
+.modal-content { background: white; width: 85%; max-width: 340px; border-radius: 16px; padding: 24px; text-align: center; transform: translateY(20px); transition: transform 0.3s ease; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+.modal-overlay.show .modal-content { transform: translateY(0); }
+.modal-icon { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px; font-size: 24px; font-weight: bold; }
+.modal-icon.error { background-color: #FEE2E2; color: var(--danger); }
+.modal-icon.success { background-color: #D1FAE5; color: var(--success); }
+.modal-icon.warning { background-color: #FEF3C7; color: var(--warning); }
+.modal-title { margin: 0 0 8px; font-size: 18px; color: var(--text-main); }
+.modal-text { margin: 0 0 20px; font-size: 14px; color: var(--text-muted); line-height: 1.5; }
+
+/* Toast sukses -- auto-dismiss, tidak butuh tap konfirmasi (dipakai tampilAlert('success', ...)) */
+.toast-sukses {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+  width: calc(100% - 40px); max-width: 340px;
+  background: #1F2937; color: #fff; border-radius: 12px; padding: 14px 16px;
+  display: flex; align-items: flex-start; gap: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.25); z-index: 10020;
+  opacity: 0; pointer-events: none; transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.toast-sukses.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-sukses .toast-icon { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--success); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; margin-top: 1px; }
+.toast-sukses strong { display: block; font-size: 13.5px; margin-bottom: 2px; }
+.toast-sukses p { margin: 0; font-size: 12.5px; color: #D1D5DB; line-height: 1.4; }

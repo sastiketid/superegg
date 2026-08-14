@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Super Eggo V2 - Peta Persebaran Toko</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="shared/style.css">
+    <style>
+      .map-preview-box { width: 100%; height: 260px; border-radius: 12px; border: 1.5px solid #E5E7EB; margin-bottom: 15px; z-index: 1; }
+      .custom-pin-marker { border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold; }
+      .leaflet-tooltip.map-label { background: transparent; border: none; box-shadow: none; font-weight: 800; font-size: 11px; color: #1F2937; text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white; }
+      .leaflet-popup-content { text-align: center; }
+      .popup-nama { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
+      .popup-aksi { display: flex; gap: 6px; }
+      .popup-aksi a, .popup-aksi button { flex: 1; margin: 0; padding: 7px; font-size: 11.5px; }
+
+      .peta-list { max-height: 55vh; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 12px; padding: 8px 10px; background: #F9FAFB; }
+      .peta-item { display: flex; align-items: center; gap: 10px; padding: 12px 6px; border-bottom: 1px solid #E5E7EB; }
+      .peta-item:last-child { border-bottom: none; }
+      .peta-item .stop-badge { flex-shrink: 0; background: var(--primary); color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; }
+      .peta-item.non-aktif .stop-badge { background: var(--danger); }
+      .peta-item .peta-nama { flex: 1; font-weight: 500; font-size: 14.5px; color: var(--text-main); word-break: break-word; }
+      .peta-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+      .peta-item-actions a, .peta-item-actions button { width: 34px; height: 34px; margin: 0; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #F3F4F6; color: var(--secondary); }
+      .peta-item-actions a:hover, .peta-item-actions button:hover { background: #E5E7EB; }
+    </style>
+  </head>
+  <body>
+
+    <div id="custom-alert" class="modal-overlay">
+      <div class="modal-content">
+        <div id="alert-icon" class="modal-icon"></div>
+        <h3 id="alert-title" class="modal-title">Info</h3>
+        <p id="alert-text" class="modal-text">Pesan</p>
+        <button onclick="tutupAlert()" class="btn-primary" id="alert-btn">Mengerti</button>
+      </div>
+    </div>
+
+    <div class="container">
+
+      <div class="feature-header">
+        <button class="btn-back-icon" onclick="location.href='index.html'" aria-label="Kembali">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2>Peta Persebaran Toko</h2>
+      </div>
+
+      <div class="scroll-area">
+
+      <div class="custom-select-wrapper" style="margin-bottom:15px;">
+        <div class="custom-select-input" id="peta-tab-toggle" style="cursor:pointer;" onclick="togglePetaTabList(event)">
+          <span id="peta-tab-label">Toko Aktif</span>
+        </div>
+        <ul id="peta-tab-list" class="custom-select-list">
+          <li onclick="pilihPetaTab('aktif')">Toko Aktif</li>
+          <li onclick="pilihPetaTab('nonaktif')">Toko Non-Aktif</li>
+          <li onclick="pilihPetaTab('semua')">Semua Toko</li>
+        </ul>
+      </div>
+
+      <div id="map-peta" class="map-preview-box"></div>
+
+      <div class="form-group">
+        <div class="search-wrapper">
+          <input type="text" id="cari-peta-input" placeholder="Memuat daftar toko..." oninput="filterPeta()">
+          <button type="button" class="search-clear-btn hidden" id="cari-peta-clear" onclick="clearCariPeta()" aria-label="Hapus pencarian">✕</button>
+        </div>
+      </div>
+
+      <p id="jumlah-peta-aktif" style="font-size: 12.5px; font-weight: 600; color: var(--text-muted); margin: 0 0 8px 2px;">Toko Aktif : 0</p>
+
+      <div id="peta-list" class="peta-list"></div>
+
+      </div>
+
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="shared/app.js"></script>
+    <script>
+      let dropdownData = {};
+      let daftarAktif = [];
+      let daftarNonAktif = [];
+      let dataDimuat = false;
+      let tabPetaSaatIni = 'aktif'; // 'aktif' | 'nonaktif' | 'semua'
+      let map, markers = [];
+
+      document.addEventListener('DOMContentLoaded', () => {
+        map = L.map('map-peta').setView([-7.5666, 110.8166], 12);
+        L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps', maxZoom: 20 }).addTo(map);
+        setTimeout(() => map.invalidateSize(), 100);
+
+        muatDataPeta();
+      });
+
+      function muatDataPeta() {
+        document.getElementById('cari-peta-input').value = "";
+        Promise.all([
+          jalankanFetchAPI('getTokoUntukRute'),
+          jalankanFetchAPI('getTokoNonAktif')
+        ]).then(([aktif, nonAktif]) => {
+          daftarAktif = aktif || [];
+          daftarNonAktif = nonAktif || [];
+          dataDimuat = true;
+          document.getElementById('cari-peta-input').placeholder = "Cari nama toko...";
+          renderPeta();
+        }).catch(err => {
+          document.getElementById('cari-peta-input').placeholder = "Gagal memuat";
+          tampilAlert('error', 'Koneksi Gagal', 'Gagal mengambil data toko dari server.');
+        });
+      }
+
+      function togglePetaTabList(event) {
+        // stopPropagation wajib -- ada listener global di shared/app.js yang menutup SEMUA
+        // .custom-select-list di tiap klik dokumen (dipakai dropdown lain di app ini), tanpa
+        // ini klik yang barusan membuka dropdown ini langsung ikut menutupnya lagi juga.
+        event.stopPropagation();
+        document.getElementById('peta-tab-list').classList.toggle('show');
+      }
+
+      function pilihPetaTab(tab) {
+        tabPetaSaatIni = tab;
+        const label = tab === 'aktif' ? 'Toko Aktif' : tab === 'nonaktif' ? 'Toko Non-Aktif' : 'Semua Toko';
+        document.getElementById('peta-tab-label').textContent = label;
+        document.getElementById('peta-tab-list').classList.remove('show');
+        renderPeta();
+      }
+
+      function daftarUntukTabIni() {
+        if (tabPetaSaatIni === 'aktif') return daftarAktif.map(t => ({ ...t, aktif: true }));
+        if (tabPetaSaatIni === 'nonaktif') return daftarNonAktif.map(t => ({ ...t, aktif: false }));
+        return [...daftarAktif.map(t => ({ ...t, aktif: true })), ...daftarNonAktif.map(t => ({ ...t, aktif: false }))];
+      }
+
+      function renderPeta() {
+        if (!dataDimuat) return;
+        const q = document.getElementById('cari-peta-input').value.toLowerCase();
+        const daftar = daftarUntukTabIni().filter(t => t.nama.toLowerCase().includes(q));
+
+        document.getElementById('jumlah-peta-aktif').textContent =
+          (tabPetaSaatIni === 'aktif' ? 'Toko Aktif' : tabPetaSaatIni === 'nonaktif' ? 'Toko Non-Aktif' : 'Toko Tampil') + ` : ${daftar.length}`;
+
+        renderMarkerPeta(daftar);
+        renderListPeta(daftar);
+      }
+
+      function renderMarkerPeta(daftar) {
+        markers.forEach(m => map.removeLayer(m));
+        markers = [];
+        let bounds = [];
+
+        daftar.forEach((t, i) => {
+          const warna = t.aktif ? '#4F46E5' : '#EF4444';
+          const icon = L.divIcon({ className: '', html: `<div class="custom-pin-marker" style="background-color:${warna}; width:20px; height:20px;">${i + 1}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
+          const marker = L.marker([t.lat, t.lng], { icon: icon }).addTo(map);
+          marker.bindTooltip(t.nama, { permanent: false, direction: 'top', className: 'map-label', offset: [0, -8] });
+          marker.bindPopup(buatPopupHtml(t));
+          markers.push(marker);
+          bounds.push([t.lat, t.lng]);
+        });
+
+        if (bounds.length > 0) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 15 });
+      }
+
+      function buatPopupHtml(t) {
+        const navUrl = buatUrlGmaps(t.lat, t.lng);
+        return `
+          <div class="popup-nama">${t.nama}</div>
+          <div class="popup-aksi">
+            <a href="${navUrl}" target="_blank" class="btn-primary">Buka Maps</a>
+            <button type="button" class="btn-secondary" onclick="salinLinkGmaps(${t.lat}, ${t.lng}, '${t.nama.replace(/'/g, "\\'")}')">Salin Link</button>
+          </div>
+        `;
+      }
+
+      function renderListPeta(daftar) {
+        const container = document.getElementById('peta-list');
+        container.innerHTML = "";
+
+        if (daftar.length === 0) {
+          container.innerHTML = '<div class="chk-empty">Tidak ada toko ditemukan.</div>';
+          return;
+        }
+
+        daftar.forEach((t, i) => {
+          const navUrl = buatUrlGmaps(t.lat, t.lng);
+          const item = document.createElement('div');
+          item.className = 'peta-item' + (t.aktif ? '' : ' non-aktif');
+          item.innerHTML = `
+            <span class="stop-badge">${i + 1}</span>
+            <span class="peta-nama">${t.nama}</span>
+            <div class="peta-item-actions">
+              <a href="${navUrl}" target="_blank" aria-label="Buka di Google Maps">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+              </a>
+              <button type="button" aria-label="Salin link Google Maps">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+            </div>
+          `;
+          item.querySelector('button').onclick = () => salinLinkGmaps(t.lat, t.lng, t.nama);
+          container.appendChild(item);
+        });
+      }
+
+      // Tanpa origin -> Google Maps otomatis pakai lokasi HP sekarang sebagai titik awal.
+      function buatUrlGmaps(lat, lng) {
+        return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving&dir_action=navigate`;
+      }
+
+      async function salinLinkGmaps(lat, lng, nama) {
+        const url = `https://www.google.com/maps?q=${lat},${lng}`;
+        try {
+          // clipboard.writeText bisa menggantung tanpa resolve/reject sama sekali kalau izin
+          // clipboard belum diberikan -- dibatasi waktu biar tidak macet nunggu selamanya.
+          await Promise.race([
+            navigator.clipboard.writeText(url),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Waktu habis')), 3000))
+          ]);
+          tampilAlert('success', 'Link Disalin', `Link Google Maps untuk ${nama} sudah disalin.`);
+        } catch (err) {
+          tampilAlert('error', 'Gagal Menyalin', 'Browser tidak mengizinkan akses clipboard. Coba lagi.');
+        }
+      }
+
+      function filterPeta() {
+        const input = document.getElementById('cari-peta-input');
+        document.getElementById('cari-peta-clear').classList.toggle('hidden', input.value === '');
+        renderPeta();
+      }
+
+      function clearCariPeta() {
+        const input = document.getElementById('cari-peta-input');
+        input.value = '';
+        filterPeta();
+        input.focus();
+      }
+    </script>
+  </body>
+</html>

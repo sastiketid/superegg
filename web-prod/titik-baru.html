@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Super Eggo V2 - Buka Titik Baru</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="stylesheet" href="shared/style.css">
+  </head>
+  <body>
+
+    <div id="custom-alert" class="modal-overlay">
+      <div class="modal-content">
+        <div id="alert-icon" class="modal-icon"></div>
+        <h3 id="alert-title" class="modal-title">Info</h3>
+        <p id="alert-text" class="modal-text">Pesan</p>
+        <button onclick="tutupAlert()" class="btn-primary" id="alert-btn">Mengerti</button>
+      </div>
+    </div>
+
+    <div class="container">
+
+      <div class="feature-header">
+        <button class="btn-back-icon" onclick="location.href='index.html'" aria-label="Kembali">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2>Buka Titik Baru</h2>
+      </div>
+
+      <div class="scroll-area has-sticky-bottom">
+
+      <div id="form-section">
+        <div id="form-lanjutan">
+          <div class="form-group"><label>Nama Warung:</label><input type="text" id="tb-nama" placeholder="Contoh: Ajwa Soto"></div>
+          <div class="form-group"><label>Pemilik:</label><input type="text" id="tb-pemilik" placeholder="Nama Pemilik"></div>
+          <div class="form-group"><label>No HP:</label><input type="text" inputmode="numeric" id="tb-hp" placeholder="08..."></div>
+          <div class="form-group"><label>Jml Titipan Awal (Butir):</label><input type="number" id="tb-jumlah" placeholder="0"></div>
+          <div class="form-group"><label>Catatan / Keterangan (Opsional):</label><textarea id="tb-keterangan" rows="2" placeholder="Dekat gang masjid..."></textarea></div>
+          <p style="font-size: 12px; color: var(--warning); text-align: center; font-weight: 600; margin-bottom: 10px; margin-top: 15px;">Pastikan GPS/Lokasi HP aktif sebelum mengambil foto.</p>
+        </div>
+
+        <div id="result-container" class="hidden">
+          <canvas id="canvas-foto"></canvas>
+          <p id="timestamp-text" style="font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 0;"></p>
+          <button id="btn-ulangi-foto" class="btn-secondary" style="margin-top:0;" onclick="document.getElementById('input-kamera').click()">Ulangi Foto Saja</button>
+        </div>
+
+        <div id="konfirmasi-section" class="hidden">
+          <h3 style="text-align:center; color: var(--warning-hover);">Cek Kembali Data!</h3>
+          <div class="summary-box" id="summary-box-content"></div>
+        </div>
+
+        <input type="file" id="input-kamera" accept="image/*" capture="environment" class="hidden" onchange="prosesFoto(event)">
+      </div>
+
+      </div>
+
+    </div>
+
+    <div class="sticky-bottom">
+      <div class="sticky-bottom-inner">
+        <button class="btn-danger" id="btn-ambil-foto" onclick="triggerKamera()">Ambil Foto Titik Baru &amp; Review</button>
+        <div class="dual-btn hidden" id="btn-konfirmasi-group">
+          <button class="btn-secondary" onclick="editFormulir()">Batal &amp; Edit</button>
+          <button class="btn-success" onclick="eksekusiKirim()">Kirim Final</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="shared/app.js"></script>
+    <script>
+      let currentTimestamp = "";
+      let originalImage = new Image();
+      let geoLat = 0;
+      let geoLong = 0;
+      let dropdownData = {};
+
+      function triggerKamera() {
+        const nama = document.getElementById('tb-nama').value;
+        const pemilik = document.getElementById('tb-pemilik').value;
+        const hp = document.getElementById('tb-hp').value;
+        const jumlahAwal = document.getElementById('tb-jumlah').value;
+        if (!nama || !pemilik || !hp || !jumlahAwal) return tampilAlert('warning', 'Data Belum Lengkap', 'Harap lengkapi semua isian pendaftaran.');
+
+        const btnFoto = document.getElementById('btn-ambil-foto');
+        tampilLoadingTombol(btnFoto);
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            function(position) {
+              geoLat = position.coords.latitude;
+              geoLong = position.coords.longitude;
+              sembunyikanLoadingTombol(btnFoto);
+              document.getElementById('input-kamera').click();
+            },
+            function(error) {
+              sembunyikanLoadingTombol(btnFoto);
+              tampilAlert('warning', 'GPS Ditolak', 'Pastikan Izin Lokasi aktif.');
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        } else {
+          sembunyikanLoadingTombol(btnFoto);
+          tampilAlert('error', 'Tidak Mendukung', 'Browser Anda tidak mendukung GPS.');
+        }
+      }
+
+      function prosesFoto(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const canvas = document.getElementById('canvas-foto'); const context = canvas.getContext('2d'); const reader = new FileReader();
+
+        reader.onload = function(e) {
+          originalImage.onload = function() {
+            const maxWidth = 800; const scaleSize = maxWidth / originalImage.width;
+            canvas.width = maxWidth; canvas.height = originalImage.height * scaleSize;
+            context.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+            currentTimestamp = new Date().toLocaleString('id-ID');
+            document.getElementById('timestamp-text').textContent = "Waktu foto: " + currentTimestamp;
+            document.getElementById('result-container').classList.remove('hidden');
+            document.getElementById('form-lanjutan').classList.add('hidden');
+            tampilkanKonfirmasi();
+          }
+          originalImage.src = e.target.result;
+        }
+        reader.readAsDataURL(file);
+      }
+
+      function cetakWatermark() {
+        const canvas = document.getElementById('canvas-foto'); const ctx = canvas.getContext('2d');
+        ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; const rectHeight = 150; ctx.fillRect(0, canvas.height - rectHeight, canvas.width, rectHeight);
+        ctx.font = "bold 16px sans-serif"; ctx.fillStyle = "#FFD700"; let startY = canvas.height - 125; let lineGap = 22;
+
+        const nama = document.getElementById('tb-nama').value;
+        const jumlahAwal = document.getElementById('tb-jumlah').value;
+
+        ctx.fillText(`WAKTU : ${currentTimestamp}`, 15, startY);
+        ctx.fillText(`TITIK BARU : ${nama}`, 15, startY + lineGap);
+        ctx.fillText(`DROP AWAL  : ${jumlahAwal} butir`, 15, startY + (lineGap * 2));
+        ctx.fillText(`LATITUDE   : ${geoLat}`, 15, startY + (lineGap * 3));
+        ctx.fillText(`LONGITUDE  : ${geoLong}`, 15, startY + (lineGap * 4));
+      }
+
+      function tampilkanKonfirmasi() {
+        const nama = document.getElementById('tb-nama').value;
+        const pemilik = document.getElementById('tb-pemilik').value;
+        const hp = document.getElementById('tb-hp').value;
+        const jumlahAwal = document.getElementById('tb-jumlah').value;
+        let keterangan = document.getElementById('tb-keterangan').value || "-";
+
+        document.getElementById('summary-box-content').innerHTML = `
+          <p><strong>Waktu:</strong> ${currentTimestamp}</p><p><strong>Nama Warung:</strong> ${nama}</p>
+          <p><strong>Pemilik:</strong> ${pemilik}</p><p><strong>No HP:</strong> ${hp}</p>
+          <p><strong>Drop Awal:</strong> ${jumlahAwal} butir</p><p><strong>Lat/Long:</strong> ${geoLat.toFixed(5)}, ${geoLong.toFixed(5)}</p>
+          <p><strong>Keterangan:</strong> ${keterangan}</p>
+        `;
+        cetakWatermark();
+
+        document.getElementById('konfirmasi-section').classList.remove('hidden');
+        tampilStickyBottom('konfirmasi');
+        window.scrollTo(0, 0);
+      }
+
+      function tampilStickyBottom(mode) {
+        document.getElementById('btn-ambil-foto').classList.toggle('hidden', mode !== 'ambil-foto');
+        document.getElementById('btn-konfirmasi-group').classList.toggle('hidden', mode !== 'konfirmasi');
+      }
+
+      function editFormulir() {
+        document.getElementById('konfirmasi-section').classList.add('hidden');
+        document.getElementById('result-container').classList.add('hidden');
+        document.getElementById('form-lanjutan').classList.remove('hidden');
+        tampilStickyBottom('ambil-foto');
+      }
+
+      function eksekusiKirim() {
+        const btnKirim = document.querySelector('#btn-konfirmasi-group .btn-success');
+        tampilLoadingTombol(btnKirim);
+
+        setTimeout(() => {
+          try {
+            const fotoBase64 = kompresCanvasKeDataUrl(document.getElementById('canvas-foto'));
+
+            let payload = {
+              namaWarung: document.getElementById('tb-nama').value,
+              pemilik: document.getElementById('tb-pemilik').value,
+              hp: document.getElementById('tb-hp').value,
+              jumlahAwal: parseInt(document.getElementById('tb-jumlah').value, 10) || 0,
+              keterangan: document.getElementById('tb-keterangan').value,
+              lat: geoLat,
+              long: geoLong,
+              timestamp: currentTimestamp,
+              fotoBase64: fotoBase64
+            };
+
+            jalankanFetchAPI('submitTitikBaru', payload).then(res => {
+              sembunyikanLoadingTombol(btnKirim);
+              if (res.success) {
+                tampilAlert('success', 'Berhasil', res.message, () => location.reload());
+              } else {
+                tampilAlert('error', 'Gagal', res.message || 'Terjadi kesalahan.');
+              }
+            }).catch(err => {
+              sembunyikanLoadingTombol(btnKirim);
+              tampilAlert('error', 'Koneksi Gagal', err.message || 'Gagal mengirim data ke server.');
+            });
+          } catch (err) {
+            sembunyikanLoadingTombol(btnKirim);
+            tampilAlert('error', 'Gagal Memproses', err.message || 'Terjadi kesalahan saat menyiapkan data.');
+          }
+        }, 50);
+      }
+    </script>
+  </body>
+</html>

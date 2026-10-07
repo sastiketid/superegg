@@ -2,8 +2,8 @@
 // KONFIGURASI GLOBAL (SUPEREGG V2 - PRODUCTION)
 // ==========================================
 // Backend ini untuk spreadsheet PRODUCTION (sudah dikonversi ke skema V2 PRD).
-// Kode identik dengan ../backend-v2/ (sandbox), bedanya cuma DRIVE_FOLDER_ID_BUKTI_V2
-// di bawah -- pakai folder Drive production, bukan folder sandbox.
+// Folder Drive di bawah dipakai bersama kode V1 lama, supaya foto pengiriman
+// baru tetap masuk ke lokasi yang sudah dikenal.
 // Sheet dicari lewat NAMA tab (getSheetByName), bukan GID, karena tab-tab ini
 // baru dibuat manual sesuai SHEET.md, GID belum tentu sama di tiap salinan.
 
@@ -54,7 +54,7 @@ const COL_ENDCUST_FOTO = 6;            // F - opsional, boleh kosong
 
 // Folder Drive induk (tempat subfolder per-toko dibuat) -- folder production yang sama
 // yang sudah dipakai kode V1 lama (DriveApp.getFolderById di Code.js), supaya foto baru
-// tetap masuk ke lokasi yang sudah dikenal, tidak nyasar ke folder sandbox.
+// tetap masuk ke lokasi yang sudah dikenal.
 const DRIVE_FOLDER_ID_BUKTI_V2 = "1mTW30DulUaMJOXgUzS-RUFJ-vIut71du";
 
 const HARGA_PER_BUTIR = 3500;

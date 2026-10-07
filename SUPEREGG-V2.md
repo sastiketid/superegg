@@ -1,3 +1,24 @@
+## Struktur Repo
+
+Repo ini hanya berisi satu versi aktif (production). Folder sandbox (`web-v2/`, `backend-v2/`) dan arsip V1 (`archive-v1/`) sudah dihapus; isinya masih bisa dipull dari riwayat git kalau dibutuhkan.
+
+| Path | Isi |
+|---|---|
+| `web-prod/` | Frontend statis (HTML/CSS/JS tanpa build step) yang di-deploy ke Vercel. |
+| `backend-prod/` | Backend Google Apps Script yang melayani spreadsheet production. |
+| `SHEET.md` | Daftar sheet dan nama kolom beserta tipe datanya. |
+| `SUPEREGG-V2.md` | Dokumen ini. |
+
+Deploy frontend:
+
+```powershell
+vercel --prod --cwd web-prod
+```
+
+Penting: deploy harus dijalankan dengan `--cwd web-prod` atau dari dalam folder itu. Folder root repo tidak punya `index.html`, jadi deploy dari root akan mengunggah dokumen yang salah dan production akan blank.
+
+---
+
 Sekarang saya ingin refractor fitur dan cara input data:
 1. Sheet utama yang dipakai adalah MASTER_WARUNG
 2. Sheet warung stop sekarang pakai sheet WARUNG_STOP - Jika warung di stop, data toko tersebut dipindah dari MASTER_WARUNG ke WARUNG_STOP sebagai arsip
@@ -38,3 +59,16 @@ Logika isi tiap kolom
 Untuk buka titik baru, otomatis tambahkan data di master warung, formulir sama seperti yang lama
 
 backend sekarang pakai gas dulu, jika logic ini sudah fungsional, nanti akan saya minta untuk geser ke supabase
+
+## Deployment
+
+| Bagian | Platform | Alamat |
+|---|---|---|
+| Frontend | Vercel | https://supermuncul.suksesalamsemesta.my.id |
+| Backend | Google Apps Script | dijangkau frontend lewat `/api/proxy` di Vercel |
+| Data | Google Sheets | `MASTER_WARUNG`, `END_CUSTOMER`, `WARUNG_STOP` |
+| Foto | Google Drive | `DRIVE_FOLDER_ID_BUKTI_V2` di `backend-prod/Config.gs` |
+
+Rantai request: halaman web -> `POST /api/proxy` (Vercel serverless) -> `doPost` di `Gateway.gs` -> Google Sheets.
+
+Env var Vercel: `GAS_API_URL` (scope Production) menunjuk URL deployment Apps Script.

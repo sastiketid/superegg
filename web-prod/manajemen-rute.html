@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Super Muncul - Manajemen Rute</title>
     <link rel="icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4F46E5">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
     <link rel="stylesheet" href="shared/style.css">
     <style>
@@ -16,8 +19,6 @@
       .keterangan-lama-preview { font-size: 12px; color: var(--text-muted); margin: 6px 0 0 0; font-style: italic; }
 
       .map-preview-box { width: 100%; height: 230px; border-radius: 12px; border: 1.5px solid #E5E7EB; margin-bottom: 15px; z-index: 1; }
-      .custom-pin-marker { border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.4); }
-      .pin-numbered { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold; }
       .leaflet-tooltip.map-label { background: transparent; border: none; box-shadow: none; font-weight: 800; font-size: 11px; color: #1F2937; text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white; }
 
       .chk-list { max-height: 50vh; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 12px; padding: 8px 10px; background: #F9FAFB; margin-bottom: 15px; }
@@ -26,6 +27,8 @@
       .chk-item:active { background-color: #EEF2FF; }
       .chk-item-terpilih { background-color: #EEF2FF; }
       .chk-check { flex-shrink: 0; width: 20px; text-align: center; color: var(--primary); font-weight: 800; font-size: 15px; }
+      .chk-num { flex-shrink: 0; min-width: 26px; height: 26px; padding: 0 5px; box-sizing: border-box; border-radius: 13px; background: #9CA3AF; color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+      .chk-item-terpilih .chk-num { background: var(--primary); }
       .chk-empty { text-align: center; color: var(--text-muted); padding: 20px 0; font-size: 13.5px; }
 
       .hari-box { border: 1px solid #E5E7EB; border-radius: 12px; margin-bottom: 10px; overflow: hidden; background: #F9FAFB; }
@@ -62,6 +65,11 @@
       .btn-buka-jalur { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 4px 0 0; padding: 16px; border-radius: 10px; background: var(--primary); color: white; font-weight: 700; font-size: 16px; text-decoration: none; box-sizing: border-box; }
       .btn-buka-jalur.selesai { background: var(--secondary); }
 
+      .tambah-rute-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+      .tambah-rute-grid button { margin: 0; padding: 11px 6px; font-size: 12.5px; background: #EEF2FF; color: var(--primary); border: 1.5px solid #C7D2FE; }
+      .enduser-box { border: 1.5px solid #FCD34D; background: #FFFBEB; border-radius: 14px; padding: 12px 14px; margin-bottom: 22px; font-size: 14px; }
+      .enduser-box strong { display: block; margin-bottom: 6px; color: #92400E; }
+      .enduser-box p { margin: 4px 0; display: flex; justify-content: space-between; gap: 10px; }
       .rekap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
       .rekap-tile { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px; text-align: center; }
       .rekap-tile .rekap-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
@@ -163,7 +171,14 @@
         <h3 style="margin-top:0; text-align:center; color: var(--primary);">Dashboard Rute Aktif</h3>
         <p style="font-size: 11.5px; color: var(--text-muted); text-align: center; margin: -5px 0 15px 0; line-height:1.4;">Tekan toko untuk lapor kunjungan atau tandai tutup (tersimpan lokal di HP ini).</p>
 
+        <div class="tambah-rute-grid">
+          <button type="button" onclick="bukaTambahToko()">+ Toko Lain</button>
+          <button type="button" onclick="location.href='titik-baru.html?rute=1'">+ Titik Baru</button>
+          <button type="button" onclick="location.href='pembeli-end-user.html?rute=1'">+ End User</button>
+        </div>
+
         <div id="daftar-rute-aktif"></div>
+        <div id="enduser-rute-box" class="enduser-box hidden"></div>
       </div>
 
       <div id="rekap-section" class="hidden">
@@ -178,6 +193,8 @@
           <div class="rekap-tile"><div class="rekap-label">Telur Retur</div><div class="rekap-value" id="rekap-sisa">0 btr</div></div>
           <div class="rekap-tile"><div class="rekap-label">Total Setoran</div><div class="rekap-value" id="rekap-setoran">Rp 0</div></div>
           <div class="rekap-tile"><div class="rekap-label">Toko Tutup</div><div class="rekap-value" id="rekap-tutup">0</div></div>
+          <div class="rekap-tile"><div class="rekap-label">End User</div><div class="rekap-value" id="rekap-enduser">0 btr</div></div>
+          <div class="rekap-tile"><div class="rekap-label">Titik Baru</div><div class="rekap-value" id="rekap-titikbaru">0</div></div>
         </div>
 
         <div class="rekap-tokotutup-list hidden" id="rekap-tokotutup-box">
@@ -212,6 +229,16 @@
         <button class="btn-primary" onclick="mulaiLaporanRute()">Laporkan Kunjungan</button>
         <button class="btn-danger" onclick="mulaiTokoTutup()">Toko Tutup (Ambil Foto)</button>
         <button class="btn-secondary" onclick="tutupAksiToko()">Batal</button>
+      </div>
+    </div>
+
+    <div id="modal-tambah-toko" class="modal-overlay">
+      <div class="modal-content modal-content-lg">
+        <h3>Tambah Toko ke Rute</h3>
+        <p class="modal-text" style="text-align:center; margin-bottom:12px;">Toko ditambahkan ke urutan paling akhir.</p>
+        <input type="text" id="tt-cari" placeholder="Cari nama toko..." oninput="renderTambahToko()" autocomplete="off">
+        <div id="tt-list" class="chk-list" style="margin-top:10px;"></div>
+        <button class="btn-secondary" onclick="tutupTambahToko()">Tutup</button>
       </div>
     </div>
 
@@ -290,7 +317,9 @@
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="shared/app.js"></script>
     <script>
-      const STORAGE_KEY = 'superEggoV2_ruteAktif';
+      const KEY_DRAFT_TERPILIH = 'superEggoV2_draftRuteTerpilih'; // pilihan toko yang belum dikunci, tahan reload
+      const WARNA_TERPILIH = '#4F46E5';
+      const WARNA_BELUM_PILIH = '#9CA3AF';
       const UKURAN_SEKTOR = 10; // batas maksimal titik per sektor (limit waypoint Google Maps)
       const SEKTOR_WARNA = ["#4F46E5", "#EF4444", "#10B981", "#F59E0B", "#8B5CF6", "#EC4899", "#14B8A6", "#0EA5E9"];
       const HARI_ID = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];
@@ -311,6 +340,7 @@
 
       let dropdownData = { 'rl-status': [] };
       let daftarTokoRute = [];
+      let nomorToko = {}; // id -> nomor tampil, sama di list & pin peta tahap Pilih Toko
       let urutanTerpilih = []; // array id toko yang lagi dipilih buat rute (ditandai inline di box asalnya, tidak dipindah grup)
       let urutanRute = []; // urutan yang lagi diedit di tahap Atur Jalur (belum dikunci)
       let ruteAktif = null; // rute yang sudah dikunci: { createdAt, stops: [{id,nama,lat,lng,status,setoran,restock,sisaTelur}] }
@@ -369,21 +399,79 @@
           }
         });
 
+        try { urutanTerpilih = JSON.parse(localStorage.getItem(KEY_DRAFT_TERPILIH)) || []; } catch (e) { urutanTerpilih = []; }
         cekRuteAktif();
+        pantauPerubahan(refreshDataToko);
       });
 
       function cekRuteAktif() {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          ruteAktif = JSON.parse(saved);
+        ruteAktif = ambilRuteAktif();
+        if (ruteAktif) {
           tampilkanDashboard();
+          refreshDataToko(); // nama/koordinat stop ikut versi spreadsheet terbaru
         } else {
           tampilkanPilihToko();
         }
       }
 
       function simpanRuteAktif() {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(ruteAktif));
+        simpanRuteAktifKeStorage(ruteAktif);
+      }
+
+      function simpanDraftTerpilih() {
+        localStorage.setItem(KEY_DRAFT_TERPILIH, JSON.stringify(urutanTerpilih));
+        document.getElementById('jumlah-toko-terpilih').textContent = `Terpilih : ${urutanTerpilih.length}`;
+      }
+
+      function tahapSekarang() {
+        if (ambilRuteAktif()) return 'dashboard';
+        if (!document.getElementById('atur-jalur-section').classList.contains('hidden')) return 'jalur';
+        if (!document.getElementById('pilih-rute-section').classList.contains('hidden')) return 'pilih';
+        return 'lain';
+      }
+
+      // Ambil ulang daftar toko diam-diam (dipanggil berkala & saat app dibuka lagi), lalu terapkan
+      // ke tahap yang sedang aktif TANPA mereset pilihan/urutan user. Toko yang dihapus/di-stop di
+      // spreadsheet hilang dari pilihan; toko baru langsung muncul di list.
+      let sedangRefresh = false;
+      async function refreshDataToko() {
+        if (sedangRefresh) return;
+        sedangRefresh = true;
+        try {
+          const res = await jalankanFetchAPI('getTokoUntukRute');
+          if (!Array.isArray(res) || JSON.stringify(res) === JSON.stringify(daftarTokoRute)) return;
+          daftarTokoRute = res;
+          hitungNomorToko();
+          const byId = Object.fromEntries(res.map(t => [t.id, t]));
+          const tahap = tahapSekarang();
+
+          if (tahap === 'pilih' || tahap === 'jalur') {
+            urutanTerpilih = urutanTerpilih.filter(id => byId[id]);
+            simpanDraftTerpilih();
+          }
+          if (tahap === 'pilih') {
+            document.getElementById('cari-rute-input').placeholder = "Cari nama toko...";
+            terapkanFilterDanRender();
+            renderMarkerPilih(false);
+          } else if (tahap === 'jalur') {
+            urutanRute = urutanRute.filter(t => byId[t.id]).map(t => byId[t.id]);
+            renderSortableList();
+            renderPetaJalur();
+          } else if (tahap === 'dashboard') {
+            // Stop yang tokonya sudah tidak ada di MASTER_WARUNG tetap dibiarkan (bisa jadi barusan
+            // di-Stop dari rute ini sendiri) -- cuma nama & koordinat yang diperbarui.
+            ruteAktif.stops.forEach(st => {
+              const t = byId[st.id];
+              if (t) { st.nama = t.nama; st.lat = t.lat; st.lng = t.lng; }
+            });
+            simpanRuteAktif();
+            if (!document.getElementById('dashboard-rute-section').classList.contains('hidden')) renderDashboardRute();
+          }
+        } catch (err) {
+          console.error('Refresh data toko gagal:', err);
+        } finally {
+          sedangRefresh = false;
+        }
       }
 
       // Haversine sederhana -- cukup buat perbandingan jarak relatif, tidak perlu presisi geodetik penuh.
@@ -456,6 +544,9 @@
         jalankanFetchAPI('getTokoUntukRute').then(res => {
           document.getElementById('cari-rute-input').placeholder = "Cari nama toko...";
           daftarTokoRute = res || [];
+          hitungNomorToko();
+          urutanTerpilih = urutanTerpilih.filter(id => daftarTokoRute.some(t => t.id === id));
+          simpanDraftTerpilih();
           terapkanFilterDanRender();
           renderMarkerPilih(true);
         }).catch(err => {
@@ -472,14 +563,11 @@
         let bounds = [];
         daftarTokoRute.forEach(t => {
           const terpilih = urutanTerpilih.includes(t.id);
-          const ukuran = terpilih ? 14 : 10;
-          const icon = L.divIcon({
-            className: '',
-            html: `<div class="custom-pin-marker" style="background-color:${terpilih ? '#4F46E5' : '#9CA3AF'}; width:${ukuran}px; height:${ukuran}px;"></div>`,
-            iconSize: [ukuran, ukuran], iconAnchor: [ukuran / 2, ukuran / 2]
-          });
-          const marker = L.marker([t.lat, t.lng], { icon: icon }).addTo(mapPilih);
-          marker.bindTooltip(t.nama, { permanent: false, direction: 'top', className: 'map-label', offset: [0, -8] });
+          const icon = buatIkonNomor(nomorToko[t.id], terpilih ? WARNA_TERPILIH : WARNA_BELUM_PILIH, terpilih);
+          // Toko terpilih digambar di atas yang belum, biar nomornya tidak ketutup pin abu-abu.
+          const marker = L.marker([t.lat, t.lng], { icon: icon, zIndexOffset: terpilih ? 1000 : 0 }).addTo(mapPilih);
+          marker.bindTooltip(`${nomorToko[t.id]}. ${t.nama}`, { permanent: false, direction: 'top', className: 'map-label' });
+          marker.on('click', () => toggleTokoTerpilih(t.id, !urutanTerpilih.includes(t.id)));
           markersPilih.push(marker);
           bounds.push([t.lat, t.lng]);
         });
@@ -496,6 +584,22 @@
       function terapkanFilterDanRender() {
         const q = document.getElementById('cari-rute-input').value.toLowerCase();
         renderChecklistRute(daftarTokoRute.filter(t => t.nama.toLowerCase().includes(q)));
+      }
+
+      // Urutan grup tampil: Toko Lainnya dulu, lalu per hari (Senin..Minggu). Dipakai bareng oleh
+      // render list & penomoran, supaya nomor di list selalu sama dengan nomor pin di peta.
+      function kelompokkanToko(daftar) {
+        const grup = [['Toko Lainnya', daftar.filter(t => !cariHariKanonis(t.jadwal)), null]];
+        URUTAN_HARI_JADWAL.forEach(hari => grup.push([hari, daftar.filter(t => cariHariKanonis(t.jadwal) === hari), hari]));
+        return grup.filter(g => g[1].length > 0);
+      }
+
+      // Nomor dihitung dari daftar LENGKAP (bukan hasil pencarian), jadi nomor toko tidak
+      // berubah-ubah saat user mengetik di kolom cari.
+      function hitungNomorToko() {
+        nomorToko = {};
+        let n = 0;
+        kelompokkanToko(daftarTokoRute).forEach(([, list]) => list.forEach(t => { nomorToko[t.id] = ++n; }));
       }
 
       function renderChecklistRute(daftarTampil) {
@@ -515,24 +619,14 @@
         // toko dengan jadwal tak dikenal masuk Toko Lainnya, JANGAN sampai hilang dari list.
         // Box yang isinya kosong (termasuk gara-gara kefilter pencarian) tidak dirender sama
         // sekali -- supaya "Toko Lainnya" otomatis hilang begitu semua toko sudah punya jadwal.
-        const tokoLainnya = daftarTampil.filter(t => !cariHariKanonis(t.jadwal));
-        if (tokoLainnya.length > 0) {
-          container.appendChild(buatGroupBox('Toko Lainnya', tokoLainnya, null));
-        }
-
-        URUTAN_HARI_JADWAL.forEach(hari => {
-          const tokoHari = daftarTampil.filter(t => cariHariKanonis(t.jadwal) === hari);
-          if (tokoHari.length > 0) {
-            container.appendChild(buatGroupBox(hari, tokoHari, hari));
-          }
-        });
+        kelompokkanToko(daftarTampil).forEach(([judul, list, hari]) => container.appendChild(buatGroupBox(judul, list, hari)));
       }
 
       function buatChkItem(t) {
         const terpilih = urutanTerpilih.includes(t.id);
         const item = document.createElement('div');
         item.className = 'chk-item' + (terpilih ? ' chk-item-terpilih' : '');
-        item.innerHTML = `<span class="chk-check">${terpilih ? '✓' : ''}</span><span style="flex:1; font-weight:500; color:var(--text-main);">${t.nama}</span>`;
+        item.innerHTML = `<span class="chk-num">${nomorToko[t.id]}</span><span style="flex:1; font-weight:500; color:var(--text-main);">${t.nama}</span><span class="chk-check">${terpilih ? '✓' : ''}</span>`;
         item.onclick = () => toggleTokoTerpilih(t.id, !terpilih);
         return item;
       }
@@ -572,7 +666,7 @@
           if (semuaTerpilih) urutanTerpilih = urutanTerpilih.filter(x => x !== t.id);
           else if (!urutanTerpilih.includes(t.id)) urutanTerpilih.push(t.id);
         });
-        document.getElementById('jumlah-toko-terpilih').textContent = `Terpilih : ${urutanTerpilih.length}`;
+        simpanDraftTerpilih();
         terapkanFilterDanRender();
         renderMarkerPilih(false);
       }
@@ -583,7 +677,7 @@
         } else {
           urutanTerpilih = urutanTerpilih.filter(x => x !== id);
         }
-        document.getElementById('jumlah-toko-terpilih').textContent = `Terpilih : ${urutanTerpilih.length}`;
+        simpanDraftTerpilih();
         terapkanFilterDanRender();
         renderMarkerPilih(false);
       }
@@ -609,7 +703,7 @@
           if (semuaTerpilih) urutanTerpilih = urutanTerpilih.filter(x => x !== t.id);
           else if (!urutanTerpilih.includes(t.id)) urutanTerpilih.push(t.id);
         });
-        document.getElementById('jumlah-toko-terpilih').textContent = `Terpilih : ${urutanTerpilih.length}`;
+        simpanDraftTerpilih();
         terapkanFilterDanRender();
         renderMarkerPilih(false);
       }
@@ -658,9 +752,8 @@
 
         let bounds = [];
         urutanRute.forEach((t, i) => {
-          const icon = L.divIcon({ className: '', html: `<div class="custom-pin-marker pin-numbered" style="background-color:#4F46E5;">${i + 1}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
-          const marker = L.marker([t.lat, t.lng], { icon: icon }).addTo(mapJalur);
-          marker.bindTooltip(t.nama, { permanent: false, direction: 'top', className: 'map-label', offset: [0, -10] });
+          const marker = L.marker([t.lat, t.lng], { icon: buatIkonNomor(i + 1, WARNA_TERPILIH) }).addTo(mapJalur);
+          marker.bindTooltip(t.nama, { permanent: false, direction: 'top', className: 'map-label' });
           markersJalur.push(marker);
           bounds.push([t.lat, t.lng]);
         });
@@ -710,6 +803,7 @@
         ruteAktif = {
           createdAt: new Date().toISOString(),
           stokBawa: 0,
+          endUser: [], // pembelian end user di jalan: [{nama, jumlah, uang}]
           stops: urutanRute.map(t => ({
             id: t.id, nama: t.nama, lat: t.lat, lng: t.lng,
             status: 'belum', // 'belum' | 'dilapor' | 'tutup'
@@ -793,6 +887,7 @@
 
         ruteAktif.stokBawa = parseInt(document.getElementById('sb-jumlah').value, 10) || 0;
         simpanRuteAktif();
+        localStorage.removeItem(KEY_DRAFT_TERPILIH);
 
         const dataUrl = kompresCanvasKeDataUrl(document.getElementById('sb-canvas-foto'), 400);
         const namaFile = `STOK-BAWA_${Date.now()}.jpg`;
@@ -872,6 +967,49 @@
           box.appendChild(body);
           container.appendChild(box);
         }
+
+        const endUser = ruteAktif.endUser || [];
+        const euBox = document.getElementById('enduser-rute-box');
+        euBox.classList.toggle('hidden', endUser.length === 0);
+        euBox.innerHTML = `<strong>Pembeli End User (${endUser.length})</strong>` +
+          endUser.map((e, i) => `<p><span>${i + 1}. ${e.nama}</span><span>${e.jumlah} btr · ${formatRupiah(e.uang || 0)}</span></p>`).join('');
+      }
+
+      // ===== TAMBAH TOKO LAIN KE RUTE YANG SUDAH DIKUNCI =====
+
+      function bukaTambahToko() {
+        document.getElementById('tt-cari').value = '';
+        document.getElementById('modal-tambah-toko').classList.add('show');
+        renderTambahToko();
+        refreshDataToko().then(renderTambahToko); // pastikan toko yang baru ditambah di spreadsheet ikut muncul
+      }
+
+      function tutupTambahToko() {
+        document.getElementById('modal-tambah-toko').classList.remove('show');
+      }
+
+      function renderTambahToko() {
+        const list = document.getElementById('tt-list');
+        if (daftarTokoRute.length === 0) { list.innerHTML = '<div class="chk-empty">Memuat daftar toko...</div>'; return; }
+        const q = document.getElementById('tt-cari').value.toLowerCase();
+        const sudahDiRute = new Set(ruteAktif.stops.map(t => t.id));
+        const tampil = daftarTokoRute.filter(t => !sudahDiRute.has(t.id) && t.nama.toLowerCase().includes(q));
+        list.innerHTML = tampil.length ? '' : '<div class="chk-empty">Tidak ada toko ditemukan.</div>';
+        tampil.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'chk-item';
+          item.textContent = t.nama;
+          item.onclick = () => tambahTokoKeRute(t);
+          list.appendChild(item);
+        });
+      }
+
+      function tambahTokoKeRute(t) {
+        ruteAktif.stops.push({ id: t.id, nama: t.nama, lat: t.lat, lng: t.lng, status: 'belum', setoran: 0, restock: 0, sisaTelur: 0 });
+        simpanRuteAktif();
+        tutupTambahToko();
+        renderDashboardRute();
+        tampilAlert('success', 'Toko Ditambahkan', `${t.nama} masuk ke Sektor ${Math.ceil(ruteAktif.stops.length / UKURAN_SEKTOR)}.`);
       }
 
       // Tanpa origin -> Google Maps otomatis pakai lokasi HP sekarang sebagai titik awal.
@@ -1053,6 +1191,7 @@
 
             let payload = {
               storeId: stopAktifId,
+              namaToko: rlTokoDetail.nama,
               sisaTelur: sisaTelurAngka,
               totalSetoran: setoranMurni,
               status: status,
@@ -1211,10 +1350,17 @@
             tokoTutup.push(s.nama);
           }
         });
+        // Pembelian end user di jalan ikut mengurangi stok bawa & menambah uang yang dipegang sales.
+        // Titik Baru sudah masuk lewat stops (status 'dilapor', restock = drop awal).
+        const endUser = ruteAktif.endUser || [];
+        const totalEndUser = endUser.reduce((n, e) => n + (e.jumlah || 0), 0);
+        totalSetoran += endUser.reduce((n, e) => n + (e.uang || 0), 0);
+        const totalTitikBaru = ruteAktif.stops.filter(s => s.titikBaru).length;
+        const telurKeluar = totalRestock + totalEndUser;
         const telurAwal = ruteAktif.stokBawa || 0;
-        const sisaTelurBaru = telurAwal - totalRestock;
+        const sisaTelurBaru = telurAwal - telurKeluar;
         const totalTokoDikunjungi = ruteAktif.stops.length; // jumlah toko yang masuk list sektor rute ini
-        return { totalSetoran, totalRestock, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi };
+        return { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru, endUser };
       }
 
       function tampilkanRekap() {
@@ -1226,10 +1372,12 @@
 
         document.getElementById('rekap-tanggal-lock').textContent = formatTanggalIndo(new Date(ruteAktif.createdAt));
 
-        const { totalSetoran, totalRestock, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi } = hitungRekap();
+        const { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru } = hitungRekap();
+        document.getElementById('rekap-enduser').textContent = `${totalEndUser} btr`;
+        document.getElementById('rekap-titikbaru').textContent = totalTitikBaru;
         document.getElementById('rekap-toko-dikunjungi-teks').textContent = `Toko Dikunjungi : ${totalTokoDikunjungi}`;
         document.getElementById('rekap-telur-awal').textContent = `${telurAwal} btr`;
-        document.getElementById('rekap-restock').textContent = `${totalRestock} btr`;
+        document.getElementById('rekap-restock').textContent = `${telurKeluar} btr`;
         document.getElementById('rekap-sisa-baru').textContent = `${sisaTelurBaru} btr`;
         document.getElementById('rekap-sisa').textContent = `${totalSisaTelur} btr`;
         document.getElementById('rekap-setoran').textContent = formatRupiah(totalSetoran);
@@ -1258,16 +1406,21 @@
         tampilLoadingTombol(btn);
 
         const tanggal = formatTanggalIndo(new Date(ruteAktif.createdAt));
-        const { totalSetoran, totalRestock, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi } = hitungRekap();
+        const { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru, endUser } = hitungRekap();
 
         let teks = `*REKAP RUTE - ${tanggal}*\n\n`;
         teks += `Toko Dikunjungi: ${totalTokoDikunjungi}\n`;
         teks += `Telur Awal: ${telurAwal} butir\n`;
-        teks += `Telur Keluar (Restock): ${totalRestock} butir\n`;
+        teks += `Telur Keluar: ${telurKeluar} butir (End User: ${totalEndUser} butir)\n`;
         teks += `Sisa Telur Baru: ${sisaTelurBaru} butir\n`;
         teks += `Telur Retur: ${totalSisaTelur} butir\n`;
         teks += `Total Setoran: ${formatRupiah(totalSetoran)}\n`;
         teks += `Toko Tutup: ${tokoTutup.length}\n`;
+        teks += `Titik Baru: ${totalTitikBaru}\n`;
+        if (endUser.length > 0) {
+          teks += `\nPembeli End User:\n`;
+          endUser.forEach((e, i) => { teks += `${i + 1}. ${e.nama} - ${e.jumlah} butir - ${formatRupiah(e.uang || 0)}\n`; });
+        }
         if (tokoTutup.length > 0) {
           teks += `\nDaftar Toko Tutup:\n`;
           tokoTutup.forEach((nama, i) => { teks += `${i + 1}. ${nama}\n`; });
@@ -1304,11 +1457,13 @@
 
       function akhiriRute() {
         tampilConfirm('Akhiri Rute?', 'Data rute aktif di HP ini akan dihapus permanen. Yakin sudah selesai?', () => {
-          localStorage.removeItem(STORAGE_KEY);
+          const { endUser, ...rekap } = hitungRekap();
+          simpanRiwayat('ruteSelesai', { tanggalRute: ruteAktif.createdAt, ...rekap, jumlahEndUser: endUser.length });
+          localStorage.removeItem(KEY_RUTE_AKTIF);
           ruteAktif = null;
           urutanRute = [];
           urutanTerpilih = [];
-          document.getElementById('jumlah-toko-terpilih').textContent = 'Terpilih : 0';
+          simpanDraftTerpilih();
           document.getElementById('rekap-section').classList.add('hidden');
           tampilkanPilihToko();
           terapkanFilterDanRender();

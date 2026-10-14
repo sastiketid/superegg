@@ -7,6 +7,7 @@ Berikut adalah daftar sheet yang tersedia:
 * **MASTER_WARUNG**
 * **END_CUSTOMER**
 * **WARUNG_STOP**
+* **HUTANG** (dibuat otomatis oleh backend saat fitur Catatan Hutang pertama kali dipakai)
 
 ---
 
@@ -49,3 +50,13 @@ Berikut adalah daftar sheet yang tersedia:
 * **Kolom G** - Riwayat Setoran - Angka/Nomor
 * **Kolom H** - Riwayat Sisa Telur - Angka/Nomor
 * **Kolom I** - Link Folder Foto - Teks
+
+### D. Sheet: HUTANG
+Model buku kas: satu baris = satu kejadian. Saldo per nama = total `Hutang` - total `Bayar` (dihitung di aplikasi).
+* **Kolom A** - Tanggal - Tanggal/Waktu
+* **Kolom B** - Nama (toko atau pembeli) - Teks
+* **Kolom C** - Tipe (`Hutang` / `Bayar`) - Teks
+* **Kolom D** - Jumlah (Rp) - Angka/Nomor
+* **Kolom E** - Keterangan - Teks
+* **Kolom F** - Sales - Teks/Kosong
+* **Kolom G** - ID Toko (kalau nama cocok dengan toko di MASTER_WARUNG) - Teks/Kosong

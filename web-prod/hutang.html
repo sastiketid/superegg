@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Super Muncul - Catatan Hutang</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4F46E5">
+    <link rel="stylesheet" href="shared/style.css">
+    <style>
+      .total-hutang { background: #FEF2F2; border: 1px solid #FCA5A5; border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 14px; }
+      .total-hutang .label { font-size: 11px; font-weight: 700; color: #991B1B; text-transform: uppercase; letter-spacing: 0.3px; }
+      .total-hutang .nilai { font-size: 24px; font-weight: 800; color: var(--danger); margin-top: 2px; }
+      .total-hutang .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+      .debitur-list { border: 1px solid #E5E7EB; border-radius: 12px; background: #F9FAFB; overflow: hidden; }
+      .debitur-item { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid #E5E7EB; background: #FFF; cursor: pointer; }
+      .debitur-item:last-child { border-bottom: none; }
+      .debitur-item:active { background: #EEF2FF; }
+      .debitur-nama { flex: 1; font-weight: 600; font-size: 15px; }
+      .debitur-nama small { display: block; font-weight: 500; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+      .debitur-saldo { flex-shrink: 0; font-weight: 800; font-size: 15px; color: var(--danger); }
+      .debitur-saldo.lunas { color: var(--success); font-size: 12.5px; }
+      .list-kosong { text-align: center; color: var(--text-muted); padding: 30px 0; font-size: 13.5px; }
+      .toggle-lunas { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); margin: 0 0 10px 2px; font-weight: 600; }
+      .toggle-lunas input { width: auto; margin: 0; }
+      .mutasi { text-align: left; max-height: 40vh; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 10px; margin-bottom: 12px; }
+      .mutasi p { display: flex; justify-content: space-between; gap: 10px; margin: 0; padding: 9px 12px; border-bottom: 1px solid #F3F4F6; font-size: 13px; }
+      .mutasi p:last-child { border-bottom: none; }
+      .mutasi small { display: block; color: var(--text-muted); font-size: 11.5px; }
+      .mutasi .plus { color: var(--danger); font-weight: 700; flex-shrink: 0; }
+      .mutasi .minus { color: var(--success); font-weight: 700; flex-shrink: 0; }
+      .modal-content-lg { max-height: 88vh; min-height: 0; overflow-y: auto; }
+      #custom-alert { z-index: 10010; }
+    </style>
+  </head>
+  <body>
+
+    <div id="custom-alert" class="modal-overlay">
+      <div class="modal-content">
+        <div id="alert-icon" class="modal-icon"></div>
+        <h3 id="alert-title" class="modal-title">Info</h3>
+        <p id="alert-text" class="modal-text">Pesan</p>
+        <button onclick="tutupAlert()" class="btn-primary" id="alert-btn">Mengerti</button>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="feature-header">
+        <button class="btn-back-icon" onclick="location.href='index.html'" aria-label="Kembali">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2>Catatan Hutang</h2>
+      </div>
+
+      <div class="scroll-area has-sticky-bottom">
+        <div class="total-hutang">
+          <div class="label">Total Belum Lunas</div>
+          <div class="nilai" id="total-nilai">Rp 0</div>
+          <div class="sub" id="total-sub">Memuat...</div>
+        </div>
+
+        <div class="form-group">
+          <div class="search-wrapper">
+            <input type="text" id="cari-input" placeholder="Cari nama..." oninput="render()" autocomplete="off">
+          </div>
+        </div>
+        <label class="toggle-lunas"><input type="checkbox" id="tampil-lunas" onchange="render()"> Tampilkan yang sudah lunas</label>
+
+        <div id="debitur-list" class="debitur-list"><div class="list-kosong">Memuat...</div></div>
+      </div>
+    </div>
+
+    <div class="sticky-bottom">
+      <div class="sticky-bottom-inner">
+        <button class="btn-danger" onclick="bukaForm('Hutang', '')">+ Catat Hutang Baru</button>
+      </div>
+    </div>
+
+    <!-- Detail satu nama: riwayat mutasi + aksi cepat -->
+    <div id="modal-detail" class="modal-overlay">
+      <div class="modal-content modal-content-lg">
+        <h3 class="modal-title" id="detail-nama">-</h3>
+        <p class="modal-text" style="margin-bottom:12px;">Sisa hutang: <strong id="detail-saldo" style="color:var(--danger);">Rp 0</strong></p>
+        <div class="mutasi" id="detail-mutasi"></div>
+        <button class="btn-success" onclick="bukaForm('Bayar', namaDetail)">Terima Bayar</button>
+        <button class="btn-danger" onclick="bukaForm('Hutang', namaDetail)">Tambah Hutang</button>
+        <button class="btn-secondary" onclick="tutupModal('modal-detail')">Tutup</button>
+      </div>
+    </div>
+
+    <!-- Form satu-satunya: dipakai untuk Hutang maupun Bayar -->
+    <div id="modal-form" class="modal-overlay">
+      <div class="modal-content modal-content-lg" style="text-align:left;">
+        <h3 class="modal-title" id="form-judul" style="text-align:center;">Catat Hutang</h3>
+        <div class="form-group">
+          <label>Nama Toko / Pembeli:</label>
+          <input type="text" id="f-nama" list="daftar-nama" placeholder="Ketik atau pilih nama" autocomplete="off">
+          <datalist id="daftar-nama"></datalist>
+        </div>
+        <div class="form-group"><label>Jumlah (Rp):</label><input type="text" inputmode="numeric" id="f-jumlah" placeholder="0" oninput="formatRupiahInput(this)"></div>
+        <div class="form-group"><label>Keterangan (opsional):</label><input type="text" id="f-ket" placeholder="mis. setoran kurang, bayar besok"></div>
+        <div class="dual-btn">
+          <button class="btn-secondary" onclick="tutupModal('modal-form')">Batal</button>
+          <button class="btn-success" id="f-simpan" onclick="simpanForm()">Simpan</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="shared/app.js"></script>
+    <script>
+      let dropdownData = {};
+      let entri = [];        // semua baris sheet HUTANG
+      let tokoAktif = [];    // {id, nama} untuk saran nama & isi ID Toko
+      let namaDetail = '';
+      let tipeForm = 'Hutang';
+      const rp = n => 'Rp ' + Math.round(Number(n) || 0).toLocaleString('id-ID');
+      const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const kunci = s => s.trim().toLowerCase(); // "Toko Ani" & "toko ani " dianggap orang yang sama
+      const tglPendek = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }); };
+
+      document.addEventListener('DOMContentLoaded', () => {
+        muat();
+        jalankanFetchAPI('getDaftarTokoAktif').then(res => { tokoAktif = res || []; isiSaranNama(); }).catch(() => {});
+        pantauPerubahan(muat);
+      });
+
+      async function muat() {
+        try {
+          entri = await jalankanFetchAPI('getHutang');
+          if (!Array.isArray(entri)) throw new Error(entri && entri.message);
+          render();
+          isiSaranNama();
+          if (document.getElementById('modal-detail').classList.contains('show')) bukaDetail(namaDetail);
+        } catch (err) {
+          document.getElementById('total-sub').textContent = 'Gagal memuat data';
+        }
+      }
+
+      // Kelompokkan per nama -> { nama, saldo, terakhir, mutasi[] }
+      function rekapPerNama() {
+        const map = {};
+        entri.forEach(e => {
+          const k = kunci(e.nama);
+          const g = map[k] || (map[k] = { nama: e.nama, saldo: 0, terakhir: '', mutasi: [] });
+          g.saldo += e.tipe === 'Bayar' ? -e.jumlah : e.jumlah;
+          g.mutasi.push(e);
+          if (e.tanggal > g.terakhir) g.terakhir = e.tanggal;
+        });
+        return Object.values(map);
+      }
+
+      function render() {
+        const semua = rekapPerNama();
+        const belumLunas = semua.filter(g => g.saldo > 0);
+        document.getElementById('total-nilai').textContent = rp(belumLunas.reduce((n, g) => n + g.saldo, 0));
+        document.getElementById('total-sub').textContent = `${belumLunas.length} orang/toko belum lunas`;
+
+        const q = kunci(document.getElementById('cari-input').value);
+        const tampilLunas = document.getElementById('tampil-lunas').checked;
+        const tampil = semua
+          .filter(g => (tampilLunas || g.saldo > 0) && kunci(g.nama).includes(q))
+          .sort((a, b) => b.saldo - a.saldo);
+
+        const box = document.getElementById('debitur-list');
+        if (tampil.length === 0) { box.innerHTML = '<div class="list-kosong">Tidak ada hutang tercatat.</div>'; return; }
+        box.innerHTML = '';
+        tampil.forEach(g => {
+          const item = document.createElement('div');
+          item.className = 'debitur-item';
+          item.innerHTML = `<span class="debitur-nama">${esc(g.nama)}<small>Terakhir: ${tglPendek(g.terakhir)}</small></span>
+            <span class="debitur-saldo ${g.saldo > 0 ? '' : 'lunas'}">${g.saldo > 0 ? rp(g.saldo) : 'Lunas'}</span>`;
+          item.onclick = () => bukaDetail(g.nama);
+          box.appendChild(item);
+        });
+      }
+
+      function isiSaranNama() {
+        const nama = new Set([...tokoAktif.map(t => t.nama), ...entri.map(e => e.nama)]);
+        document.getElementById('daftar-nama').innerHTML = [...nama].sort().map(n => `<option value="${esc(n)}">`).join('');
+      }
+
+      function bukaDetail(nama) {
+        const g = rekapPerNama().find(x => kunci(x.nama) === kunci(nama));
+        if (!g) return;
+        namaDetail = g.nama;
+        document.getElementById('detail-nama').textContent = g.nama;
+        document.getElementById('detail-saldo').textContent = g.saldo > 0 ? rp(g.saldo) : 'Lunas';
+        document.getElementById('detail-mutasi').innerHTML = g.mutasi.slice().reverse().map(e => `<p>
+          <span>${tglPendek(e.tanggal)} · ${e.tipe}${e.keterangan ? `<small>${esc(e.keterangan)}</small>` : ''}</span>
+          <span class="${e.tipe === 'Bayar' ? 'minus' : 'plus'}">${e.tipe === 'Bayar' ? '−' : '+'}${rp(e.jumlah)}</span></p>`).join('');
+        document.getElementById('modal-detail').classList.add('show');
+      }
+
+      function bukaForm(tipe, nama) {
+        tipeForm = tipe;
+        document.getElementById('form-judul').textContent = tipe === 'Bayar' ? 'Terima Pembayaran' : 'Catat Hutang';
+        document.getElementById('f-nama').value = nama;
+        document.getElementById('f-ket').value = '';
+        const jumlah = document.getElementById('f-jumlah');
+        jumlah.value = '';
+        // Bayar: langsung terisi sisa hutang (paling sering dibayar lunas), tinggal ubah kalau nyicil.
+        if (tipe === 'Bayar') {
+          const g = rekapPerNama().find(x => kunci(x.nama) === kunci(nama));
+          if (g && g.saldo > 0) { jumlah.value = String(g.saldo); formatRupiahInput(jumlah); }
+        }
+        tutupModal('modal-detail');
+        document.getElementById('modal-form').classList.add('show');
+      }
+
+      function tutupModal(id) { document.getElementById(id).classList.remove('show'); }
+
+      async function simpanForm() {
+        const nama = document.getElementById('f-nama').value.trim();
+        const jumlah = parseInt(document.getElementById('f-jumlah').value.replace(/[^0-9]/g, ''), 10) || 0;
+        if (!nama || jumlah <= 0) return tampilAlert('warning', 'Data Belum Lengkap', 'Isi nama dan jumlah terlebih dahulu.');
+
+        const toko = tokoAktif.find(t => kunci(t.nama) === kunci(nama));
+        const btn = document.getElementById('f-simpan');
+        tampilLoadingTombol(btn);
+        try {
+          const res = await jalankanFetchAPI('submitHutang', {
+            nama: toko ? toko.nama : nama, tipe: tipeForm, jumlah: jumlah,
+            keterangan: document.getElementById('f-ket').value.trim(),
+            sales: ambilNamaSalesLogin(), storeId: toko ? toko.id : ''
+          });
+          if (!res.success) return tampilAlert('error', 'Gagal', res.message || 'Terjadi kesalahan.');
+          tutupModal('modal-form');
+          tampilAlert('success', 'Tersimpan', res.message);
+          await muat();
+        } catch (err) {
+          tampilAlert('error', 'Koneksi Gagal', err.message || 'Gagal menyimpan ke server.');
+        } finally {
+          sembunyikanLoadingTombol(btn);
+        }
+      }
+    </script>
+  </body>
+</html>

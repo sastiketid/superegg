@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Super Muncul - Peta Persebaran Toko</title>
     <link rel="icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4F46E5">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
     <link rel="stylesheet" href="shared/style.css">
     <style>
       .map-preview-box { width: 100%; height: 260px; border-radius: 12px; border: 1.5px solid #E5E7EB; margin-bottom: 15px; z-index: 1; }
-      .custom-pin-marker { border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; font-weight: bold; }
       .leaflet-tooltip.map-label { background: transparent; border: none; box-shadow: none; font-weight: 800; font-size: 11px; color: #1F2937; text-shadow: 1px 1px 2px white, -1px -1px 2px white, 1px -1px 2px white, -1px 1px 2px white; }
       .leaflet-popup-content { text-align: center; }
       .popup-nama { font-weight: 700; font-size: 13.5px; margin-bottom: 8px; }
@@ -153,9 +155,8 @@
 
         daftar.forEach((t, i) => {
           const warna = t.aktif ? '#4F46E5' : '#EF4444';
-          const icon = L.divIcon({ className: '', html: `<div class="custom-pin-marker" style="background-color:${warna}; width:20px; height:20px;">${i + 1}</div>`, iconSize: [20, 20], iconAnchor: [10, 10] });
-          const marker = L.marker([t.lat, t.lng], { icon: icon }).addTo(map);
-          marker.bindTooltip(t.nama, { permanent: false, direction: 'top', className: 'map-label', offset: [0, -8] });
+          const marker = L.marker([t.lat, t.lng], { icon: buatIkonNomor(i + 1, warna) }).addTo(map);
+          marker.bindTooltip(t.nama, { permanent: false, direction: 'top', className: 'map-label' });
           marker.bindPopup(buatPopupHtml(t));
           markers.push(marker);
           bounds.push([t.lat, t.lng]);

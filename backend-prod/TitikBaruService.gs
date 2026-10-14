@@ -36,7 +36,9 @@ function submitTitikBaruInternal(data) {
     namaHariIni()
   ]]);
   masterSheet.getRange(targetRow, COL_MASTER_TOTAL_KIRIM).setValue(1);
-  masterSheet.getRange(targetRow, COL_MASTER_ID).setValue(buatIdBaru());
+  const idBaru = buatIdBaru();
+  masterSheet.getRange(targetRow, COL_MASTER_ID).setValue(idBaru);
 
-  return { success: true, message: `${namaToko} berhasil didaftarkan sebagai titik baru!` };
+  // id dikembalikan supaya Manajemen Rute bisa langsung memasukkan toko ini ke rute aktif.
+  return { success: true, message: `${namaToko} berhasil didaftarkan sebagai titik baru!`, id: idBaru };
 }

@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Super Muncul - Pembeli End User</title>
     <link rel="icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4F46E5">
     <link rel="stylesheet" href="shared/style.css">
     <style>
       .eu-foto-preview { position: relative; margin-bottom: 16px; }
@@ -28,7 +31,7 @@
     <div class="container">
 
       <div class="feature-header">
-        <button class="btn-back-icon" onclick="location.href='index.html'" aria-label="Kembali">
+        <button class="btn-back-icon" onclick="location.href = dibukaDariRute() ? 'manajemen-rute.html' : 'index.html'" aria-label="Kembali">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
         <h2>Pembeli End User</h2>
@@ -39,7 +42,11 @@
       <div id="form-section">
         <div class="form-group"><label>Nama Customer:</label><input type="text" id="eu-nama" placeholder="Nama pembeli"></div>
         <div class="form-group"><label>No HP:</label><input type="text" inputmode="numeric" id="eu-hp" placeholder="08..."></div>
-        <div class="form-group"><label>Jumlah Beli (Butir):</label><input type="number" id="eu-jumlah" placeholder="0"></div>
+        <div class="form-group"><label>Jumlah Beli (Butir):</label><input type="number" id="eu-jumlah" placeholder="0" oninput="isiUangOtomatis()"></div>
+        <div class="form-group hidden" id="eu-uang-group">
+          <label>Uang Diterima (Rp) — untuk rekap rute:</label>
+          <input type="text" inputmode="numeric" id="eu-uang" placeholder="0" oninput="this.dataset.manual = '1'; formatRupiahInput(this)">
+        </div>
         <div class="form-group"><label>Nama Sales:</label><input type="text" id="eu-sales" placeholder="Nama Anda"></div>
 
         <div class="form-group">
@@ -70,7 +77,17 @@
 
       document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('eu-sales').value = ambilNamaSalesLogin();
+        document.getElementById('eu-uang-group').classList.toggle('hidden', !dibukaDariRute());
       });
+
+      // Uang diterima cuma tersimpan lokal di rute aktif (sheet END_CUSTOMER tidak punya kolom uang).
+      // Terisi otomatis jumlah x Rp3.500 sampai user mengetik manual.
+      function isiUangOtomatis() {
+        const uang = document.getElementById('eu-uang');
+        if (uang.dataset.manual) return;
+        uang.value = String((parseInt(document.getElementById('eu-jumlah').value, 10) || 0) * 3500);
+        formatRupiahInput(uang);
+      }
 
       function prosesFotoEndUser(event) {
         const file = event.target.files[0];
@@ -129,6 +146,13 @@
         jalankanFetchAPI('submitPembeliEndUser', payload).then(res => {
           sembunyikanLoadingTombol(btn);
           if (res.success) {
+            if (dibukaDariRute()) {
+              const rute = ambilRuteAktif();
+              rute.endUser = rute.endUser || [];
+              rute.endUser.push({ nama: payload.namaCustomer, jumlah: payload.jumlahBeli, uang: parseInt(document.getElementById('eu-uang').value.replace(/[^0-9]/g, ''), 10) || 0 });
+              simpanRuteAktifKeStorage(rute);
+              return tampilAlert('success', 'Berhasil', res.message, () => location.href = 'manajemen-rute.html');
+            }
             tampilAlert('success', 'Berhasil', res.message, () => location.reload());
           } else {
             tampilAlert('error', 'Gagal', res.message || 'Terjadi kesalahan.');

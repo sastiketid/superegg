@@ -16,13 +16,16 @@ function doPost(e) {
       result = getTokoUntukRuteInternal();
     } else if (action === 'getTokoNonAktif') {
       result = getTokoNonAktifInternal();
-    } else if (action === 'submitLaporanSatuan' || action === 'submitTitikBaru' || action === 'submitPembeliEndUser') {
+    } else if (action === 'getHutang') {
+      result = getHutangInternal();
+    } else if (action === 'submitLaporanSatuan' || action === 'submitTitikBaru' || action === 'submitPembeliEndUser' || action === 'submitHutang') {
       const hasLock = lock.tryLock(15000);
       if (!hasLock) {
         return respondJSON({ success: false, message: "Server sedang sibuk. Silakan coba klik kirim kembali." });
       }
       if (action === 'submitLaporanSatuan') result = submitLaporanSatuanInternal(payload);
       else if (action === 'submitTitikBaru') result = submitTitikBaruInternal(payload);
+      else if (action === 'submitHutang') result = submitHutangInternal(payload);
       else result = submitPembeliEndUserInternal(payload);
     } else {
       return respondJSON({ success: false, message: "Action API tidak dikenal." });

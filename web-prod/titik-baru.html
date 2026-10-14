@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Super Muncul - Buka Titik Baru</title>
     <link rel="icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4F46E5">
     <link rel="stylesheet" href="shared/style.css">
   </head>
   <body>
@@ -21,7 +24,7 @@
     <div class="container">
 
       <div class="feature-header">
-        <button class="btn-back-icon" onclick="location.href='index.html'" aria-label="Kembali">
+        <button class="btn-back-icon" onclick="location.href = dibukaDariRute() ? 'manajemen-rute.html' : 'index.html'" aria-label="Kembali">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
         <h2>Buka Titik Baru</h2>
@@ -197,6 +200,14 @@
             jalankanFetchAPI('submitTitikBaru', payload).then(res => {
               sembunyikanLoadingTombol(btnKirim);
               if (res.success) {
+                if (dibukaDariRute()) {
+                  // Dibuka dari dashboard rute: toko baru langsung masuk rute sebagai sudah dilapor,
+                  // drop awalnya dihitung sebagai telur keluar di rekap.
+                  const rute = ambilRuteAktif();
+                  rute.stops.push({ id: res.id, nama: payload.namaWarung, lat: geoLat, lng: geoLong, status: 'dilapor', setoran: 0, restock: payload.jumlahAwal, sisaTelur: 0, titikBaru: true });
+                  simpanRuteAktifKeStorage(rute);
+                  return tampilAlert('success', 'Berhasil', res.message, () => location.href = 'manajemen-rute.html');
+                }
                 tampilAlert('success', 'Berhasil', res.message, () => location.reload());
               } else {
                 tampilAlert('error', 'Gagal', res.message || 'Terjadi kesalahan.');

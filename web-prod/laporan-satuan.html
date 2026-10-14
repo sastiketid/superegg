@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>Super Muncul - Laporan Satuan</title>
     <link rel="icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4F46E5">
     <link rel="stylesheet" href="shared/style.css">
     <style>
       .toko-detail-box { background: #EEF2FF; border: 1px solid #C7D2FE; border-radius: 12px; margin-bottom: 16px; overflow: hidden; }
@@ -139,15 +142,17 @@
         });
 
         muatDaftarToko();
+        // Toko baru/dihapus di spreadsheet ikut muncul tanpa reload (selama masih di daftar toko).
+        pantauPerubahan(() => { if (!storeIdAktif) muatDaftarToko(true); });
       });
 
-      function muatDaftarToko() {
-        document.getElementById('cari-toko-input').value = "";
+      function muatDaftarToko(diam = false) {
         jalankanFetchAPI('getDaftarTokoAktif').then(res => {
           document.getElementById('cari-toko-input').placeholder = "Cari nama toko...";
           daftarTokoAktif = res || [];
-          renderDaftarToko(daftarTokoAktif);
+          filterDaftarToko(); // pertahankan kata kunci pencarian yang sedang diketik
         }).catch(err => {
+          if (diam) return;
           document.getElementById('cari-toko-input').placeholder = "Gagal memuat";
           tampilAlert('error', 'Koneksi Gagal', 'Gagal mengambil daftar toko dari server.');
         });
@@ -353,6 +358,7 @@
 
             let payload = {
               storeId: storeIdAktif,
+              namaToko: tokoDetailAktif.nama,
               sisaTelur: parseInt(document.getElementById('sisa-telur').value, 10) || 0,
               totalSetoran: setoranMurni,
               status: status,

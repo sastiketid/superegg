@@ -2,6 +2,62 @@
 // script per-halaman -- lihat setiap halaman untuk deklarasi `dropdownData` miliknya).
 
 const KEY_NAMA_SALES_LOGIN = 'superEggoV2_namaSales';
+const KEY_RUTE_AKTIF = 'superEggoV2_ruteAktif'; // rute yang sudah dikunci di Manajemen Rute
+const KEY_RIWAYAT = 'superEggoV2_riwayat';
+const MAKS_RIWAYAT = 300;
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+
+// ===== RUTE AKTIF (dibaca juga oleh Titik Baru & Pembeli End User saat dibuka dari rute) =====
+
+function ambilRuteAktif() {
+  try { return JSON.parse(localStorage.getItem(KEY_RUTE_AKTIF)); } catch (e) { return null; }
+}
+function simpanRuteAktifKeStorage(rute) {
+  localStorage.setItem(KEY_RUTE_AKTIF, JSON.stringify(rute));
+}
+// true kalau halaman ini dibuka dari dashboard rute (?rute=1) DAN rutenya masih ada
+function dibukaDariRute() {
+  return new URLSearchParams(location.search).get('rute') === '1' && !!ambilRuteAktif();
+}
+
+// ===== RIWAYAT LOKAL (cuma teks, tanpa foto -- localStorage cuma ~5MB) =====
+
+function ambilRiwayat() {
+  try { return JSON.parse(localStorage.getItem(KEY_RIWAYAT)) || []; } catch (e) { return []; }
+}
+function simpanRiwayat(tipe, data) {
+  try {
+    const list = ambilRiwayat();
+    list.unshift({ tipe: tipe, waktu: new Date().toISOString(), data: data });
+    localStorage.setItem(KEY_RIWAYAT, JSON.stringify(list.slice(0, MAKS_RIWAYAT)));
+  } catch (e) { console.error('Gagal simpan riwayat:', e); }
+}
+
+// ===== AUTO-REFRESH DATA (perubahan manual di spreadsheet ikut kebawa tanpa reload) =====
+// ponytail: polling tiap interval selama tab terlihat + saat app dibuka lagi -- ganti ke
+// realtime (Supabase) setelah migrasi database.
+function pantauPerubahan(fn, intervalMs = 60000) {
+  setInterval(() => { if (document.visibilityState === 'visible') fn(); }, intervalMs);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fn(); });
+}
+
+// ===== PIN PETA BERNOMOR =====
+// SVG + dominant-baseline="central" supaya angka benar-benar di tengah lingkaran (versi div+flex
+// sebelumnya meleset karena metrik font & border di luar iconSize). Diameter melebar untuk 3 digit.
+function buatIkonNomor(nomor, warna, besar = false) {
+  const teks = String(nomor);
+  const d = (besar ? 26 : 22) + (teks.length > 2 ? 6 : 0);
+  const r = d / 2;
+  const fs = teks.length > 2 ? 10 : 11;
+  return L.divIcon({
+    className: 'pin-nomor',
+    html: `<svg width="${d}" height="${d}" viewBox="0 0 ${d} ${d}"><circle cx="${r}" cy="${r}" r="${r - 1.5}" fill="${warna}" stroke="#fff" stroke-width="2"/><text x="${r}" y="${r}" text-anchor="middle" dominant-baseline="central" font-family="system-ui,sans-serif" font-size="${fs}" font-weight="700" fill="#fff">${teks}</text></svg>`,
+    iconSize: [d, d], iconAnchor: [r, r], tooltipAnchor: [0, -r]
+  });
+}
 
 // Arsitektur buat fitur login yang akan menyusul: siapa pun yang membangun flow login nanti
 // tinggal nulis nama sales-nya ke localStorage key KEY_NAMA_SALES_LOGIN begitu login sukses,
@@ -127,7 +183,13 @@ async function jalankanFetchAPI(actionName, payloadData = {}, timeoutMs = 30000)
       signal: controller.signal
     });
     if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-    return await response.json();
+    const hasil = await response.json();
+    // Satu titik catat riwayat untuk semua form kirim (Laporan, Titik Baru, End User, Hutang).
+    if (actionName.startsWith('submit') && hasil && hasil.success) {
+      const { fotoBase64, ...ringkas } = payloadData;
+      simpanRiwayat(actionName, ringkas);
+    }
+    return hasil;
   } catch (err) {
     if (err.name === 'AbortError') {
       const timeoutErr = new Error('Server terlalu lama merespons (lebih dari 30 detik). Cek koneksi internet lalu coba lagi.');

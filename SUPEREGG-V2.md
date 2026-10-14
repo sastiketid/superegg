@@ -65,10 +65,10 @@ backend sekarang pakai gas dulu, jika logic ini sudah fungsional, nanti akan say
 | Bagian | Platform | Alamat |
 |---|---|---|
 | Frontend | Vercel | https://supermuncul.suksesalamsemesta.my.id |
-| Backend | Google Apps Script | dijangkau frontend lewat `/api/proxy` di Vercel |
-| Data | Google Sheets | `MASTER_WARUNG`, `END_CUSTOMER`, `WARUNG_STOP` |
+| Backend | Node API + Postgres di VPS naraya (`server/`) | dijangkau lewat `/api/proxy` Vercel; detail di `server/README.md` |
+| Sinkron sheet | Google Apps Script (`backend-prod/SyncService.gs`) | mencerminkan DB ke spreadsheet + upload foto Drive |
+| Data | Postgres (utama) + Google Sheets (cerminan) | `MASTER_WARUNG`, `END_CUSTOMER`, `WARUNG_STOP`, `HUTANG` |
 | Foto | Google Drive | `DRIVE_FOLDER_ID_BUKTI_V2` di `backend-prod/Config.gs` |
 
-Rantai request: halaman web -> `POST /api/proxy` (Vercel serverless) -> `doPost` di `Gateway.gs` -> Google Sheets.
-
-Env var Vercel: `GAS_API_URL` (scope Production) menunjuk URL deployment Apps Script.
+Rantai request: halaman web -> `POST /api/proxy` (Vercel serverless) -> API VPS (`API_URL`, header `x-api-key`) -> Postgres -> (outbox) -> GAS -> Google Sheets.
+Sebelum cutover / rollback: `API_URL` kosong -> proxy jatuh ke `GAS_API_URL` (`Gateway.gs` lama).

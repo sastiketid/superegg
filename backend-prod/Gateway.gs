@@ -16,6 +16,13 @@ function doPost(e) {
       result = getTokoUntukRuteInternal();
     } else if (action === 'getTokoNonAktif') {
       result = getTokoNonAktifInternal();
+    } else if (action === 'syncDariDb' || action === 'ambilEditSheet' || action === 'eksporSemua') {
+      // Dipanggil API VPS saja (lihat SyncService.gs) -- wajib secret.
+      if (!cekSecretSinkron(payload)) return respondJSON({ success: false, message: "Tidak diizinkan." });
+      if (!lock.tryLock(25000)) return respondJSON({ success: false, message: "Server sedang sibuk." });
+      if (action === 'syncDariDb') result = syncDariDbInternal(payload);
+      else if (action === 'ambilEditSheet') result = ambilEditSheetInternal();
+      else result = eksporSemuaInternal();
     } else if (action === 'getHutang') {
       result = getHutangInternal();
     } else if (action === 'submitLaporanSatuan' || action === 'submitTitikBaru' || action === 'submitPembeliEndUser' || action === 'submitHutang') {

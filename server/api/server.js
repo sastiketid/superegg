@@ -1,0 +1,254 @@
+'use strict';
+// API Super Muncul: kontrak sama persis dengan Gateway.gs lama (POST {action, data}),
+// jadi frontend tidak berubah -- cukup /api/proxy di Vercel diarahkan ke sini.
+// Postgres = sumber data utama; spreadsheet dicerminkan lewat outbox -> GAS (lihat SyncService.gs).
+
+const http = require('http');
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const { pool, num, hariIniJakarta, parseLatLong, keSnapshot, upsertTokoDariSheet, panggilGas, tx } = require('./lib');
+
+const API_KEY = process.env.API_KEY || '';
+const SYNC_AKTIF = process.env.SYNC_AKTIF === '1';
+const MAKS_BODY = 15 * 1024 * 1024;
+const byNama = (a, b) => a.nama.localeCompare(b.nama);
+const safeTs = ts => String(ts || '').replace(/[\/:]/g, '-');
+const fotoValid = f => typeof f === 'string' && /^data:image\/[a-z+]+;base64,/.test(f);
+
+async function antre(c, jenis, isi, foto = null, namaFile = null) {
+  await c.query('insert into outbox (jenis, isi, foto, nama_file) values ($1, $2, $3, $4)', [jenis, isi, foto, namaFile]);
+}
+
+// ===== AKSI (nama & bentuk respons = Gateway.gs) =====
+
+const aksi = {
+  async getDaftarTokoAktif() {
+    const { rows } = await pool.query("select id, nama from toko where aktif and nama <> ''");
+    return rows.sort(byNama);
+  },
+
+  async getDetailToko(d) {
+    const { rows: [t] } = await pool.query('select * from toko where id = $1 and aktif', [String(d.storeId || '')]);
+    if (!t) return { success: false, message: 'Toko tidak ditemukan.' };
+    return { success: true, data: { nama: t.nama, pemilik: t.pemilik, telurDiWarung: t.stok, keteranganTerakhir: t.keterangan } };
+  },
+
+  async getTokoUntukRute() {
+    const { rows } = await pool.query("select id, nama, latlong, jadwal from toko where aktif and nama <> ''");
+    return rows.map(r => ({ ...r, k: parseLatLong(r.latlong) })).filter(r => r.k)
+      .map(r => ({ id: r.id, nama: r.nama, lat: r.k.lat, lng: r.k.lng, jadwal: r.jadwal.trim() })).sort(byNama);
+  },
+
+  async getTokoNonAktif() {
+    const { rows } = await pool.query("select id, nama, latlong from toko where not aktif and nama <> ''");
+    return rows.map(r => ({ ...r, k: parseLatLong(r.latlong) })).filter(r => r.k)
+      .map(r => ({ id: r.id, nama: r.nama, lat: r.k.lat, lng: r.k.lng })).sort(byNama);
+  },
+
+  async getHutang() {
+    const { rows } = await pool.query('select * from hutang order by tanggal, id');
+    return rows.map(h => ({ tanggal: h.tanggal.toISOString(), nama: h.nama, tipe: h.tipe, jumlah: h.jumlah, keterangan: h.keterangan, sales: h.sales, storeId: h.toko_id }));
+  },
+
+  async submitLaporanSatuan(d) {
+    if (d.status !== 'Restock' && d.status !== 'Stop') return { success: false, message: "Status harus 'Restock' atau 'Stop'." };
+    if (!fotoValid(d.fotoBase64)) return { success: false, message: 'Foto laporan wajib ada.' };
+
+    return tx(async c => {
+      const { rows: [t] } = await c.query('select * from toko where id = $1 and aktif for update', [String(d.storeId || '')]);
+      if (!t) return { success: false, message: 'Toko tidak ditemukan (ID tidak cocok).' };
+
+      // Rumus = LaporanSatuanService.gs (lihat SUPEREGG-V2.md "Logika isi tiap kolom")
+      const sisaBaru = num(d.sisaTelur);
+      const f = t.riwayat_terjual + (t.stok - sisaBaru);
+      const j = t.riwayat_setoran + t.setoran_terakhir;
+      const k = t.riwayat_sisa + t.sisa_terakhir;
+      const q = t.total_kirim + 1;
+      const restock = d.status === 'Restock' ? num(d.jumlahRestock) : 0;
+      const keterangan = d.keteranganTouched ? String(d.keterangan || '') : t.keterangan;
+      const namaFile = `${q} - ${safeTs(d.timestamp)} - ${t.nama}.jpg`;
+
+      await c.query('insert into laporan (toko_id, status, sisa_telur, setoran, restock, keterangan) values ($1,$2,$3,$4,$5,$6)',
+        [t.id, d.status, sisaBaru, num(d.totalSetoran), restock, keterangan]);
+
+      if (d.status === 'Stop') {
+        const { rows: [u] } = await c.query(`update toko set aktif=false, riwayat_terjual=$2, riwayat_setoran=$3, riwayat_sisa=$4,
+          total_kirim=$5, diperbarui=now() where id=$1 returning *`, [t.id, f, j, k, q]);
+        await antre(c, 'tokoStop', keSnapshot(u), d.fotoBase64, namaFile);
+        return { success: true, message: `${t.nama} berhasil di-stop dan dipindah ke arsip.` };
+      }
+
+      const { rows: [u] } = await c.query(`update toko set riwayat_terjual=$2, stok=$3, kirim_terakhir=now(), setoran_terakhir=$4,
+        riwayat_setoran=$5, riwayat_sisa=$6, sisa_terakhir=$7, keterangan=$8, total_kirim=$9,
+        jadwal = case when trim(jadwal) = '' then $10 else jadwal end, diperbarui=now() where id=$1 returning *`,
+      [t.id, f, restock, num(d.totalSetoran), j, k, sisaBaru, keterangan, q, hariIniJakarta()]);
+      await antre(c, 'toko', keSnapshot(u), d.fotoBase64, namaFile);
+      return { success: true, message: 'Laporan berhasil disimpan.' };
+    });
+  },
+
+  async submitTitikBaru(d) {
+    const nama = String(d.namaWarung || '').trim();
+    if (!nama) return { success: false, message: 'Nama warung wajib diisi.' };
+    if (!fotoValid(d.fotoBase64)) return { success: false, message: 'Foto titik baru wajib ada.' };
+    const id = crypto.randomUUID();
+
+    return tx(async c => {
+      const { rows: [u] } = await c.query(`insert into toko (id, nama, pemilik, hp, latlong, stok, kirim_terakhir, keterangan, jadwal, total_kirim)
+        values ($1,$2,$3,$4,$5,$6, now(),$7,$8,1) returning *`,
+      [id, nama, String(d.pemilik || ''), String(d.hp || ''), `${d.lat}, ${d.long}`, num(d.jumlahAwal), String(d.keterangan || ''), hariIniJakarta()]);
+      await antre(c, 'toko', keSnapshot(u), d.fotoBase64, `1 - ${safeTs(d.timestamp)} - ${nama}.jpg`);
+      return { success: true, message: `${nama} berhasil didaftarkan sebagai titik baru!`, id };
+    });
+  },
+
+  async submitPembeliEndUser(d) {
+    const nama = String(d.namaCustomer || '').trim();
+    if (!nama) return { success: false, message: 'Nama customer wajib diisi.' };
+    const foto = fotoValid(d.fotoBase64) ? d.fotoBase64 : null;
+
+    return tx(async c => {
+      const { rows: [e] } = await c.query('insert into end_customer (id, nama, sales, hp, jumlah) values ($1,$2,$3,$4,$5) returning *',
+        [crypto.randomUUID(), nama, String(d.namaSales || ''), String(d.hp || ''), num(d.jumlahBeli)]);
+      await antre(c, 'endCustomer', { id: e.id, nama: e.nama, sales: e.sales, hp: e.hp, jumlah: e.jumlah, foto: '' }, foto, `${safeTs(d.timestamp)} - ${nama}.jpg`);
+      return { success: true, message: `${nama} berhasil disimpan.` };
+    });
+  },
+
+  async submitHutang(d) {
+    const nama = String(d.nama || '').trim();
+    const jumlah = num(d.jumlah);
+    if (!nama) return { success: false, message: 'Nama wajib diisi.' };
+    if (d.tipe !== 'Hutang' && d.tipe !== 'Bayar') return { success: false, message: "Tipe harus 'Hutang' atau 'Bayar'." };
+    if (jumlah <= 0) return { success: false, message: 'Jumlah harus lebih dari 0.' };
+
+    return tx(async c => {
+      const { rows: [h] } = await c.query(`insert into hutang (id, nama, tipe, jumlah, keterangan, sales, toko_id)
+        values ($1,$2,$3,$4,$5,$6,$7) returning *`,
+      [crypto.randomUUID(), nama, d.tipe, jumlah, String(d.keterangan || ''), String(d.sales || ''), String(d.storeId || '')]);
+      await antre(c, 'hutang', { id: h.id, tanggal: h.tanggal.toISOString(), nama, tipe: h.tipe, jumlah, keterangan: h.keterangan, sales: h.sales, storeId: h.toko_id });
+      const label = d.tipe === 'Bayar' ? 'Pembayaran' : 'Hutang';
+      return { success: true, message: `${label} ${nama} berhasil dicatat.` };
+    });
+  }
+};
+
+// ===== SINKRON KE SPREADSHEET =====
+// Satu event dikirim per waktu, urut id. Gagal -> coba lagi dengan jeda bertambah (maks 15 menit);
+// setelah 20x ditandai gagal supaya antrian tidak macet selamanya (lihat /health, bisa diulang
+// manual: update outbox set gagal=false, percobaan=0 where gagal).
+
+let sinkronJalan = false;
+let terakhirTarikEdit = 0;
+
+async function tarikEditSheet() {
+  const hasil = await panggilGas('ambilEditSheet');
+  if (!hasil.success) throw new Error(hasil.message || 'ambilEditSheet gagal');
+  for (const t of hasil.data) if (t.id && t.nama) await upsertTokoDariSheet(pool, t);
+  if (hasil.data.length) console.log(`Tarik edit sheet: ${hasil.data.length} toko diperbarui`);
+}
+
+async function catatGagal(ev, pesan) {
+  const percobaan = ev.percobaan + 1;
+  const jedaDetik = Math.min(900, 5 * 2 ** percobaan);
+  await pool.query(`update outbox set percobaan=$2, error=$3, gagal=$4, coba_lagi=now() + make_interval(secs => $5) where id=$1`,
+    [ev.id, percobaan, String(pesan).slice(0, 500), percobaan >= 20, jedaDetik]);
+  console.error(`Sinkron outbox #${ev.id} (${ev.jenis}) gagal ke-${percobaan}: ${pesan}`);
+}
+
+async function siklusSinkron() {
+  if (!SYNC_AKTIF || sinkronJalan) return;
+  sinkronJalan = true;
+  try {
+    const { rows: [ada] } = await pool.query('select 1 from outbox where selesai is null and not gagal limit 1');
+    // Tarik edit manual DULU sebelum kirim snapshot, supaya edit pemilik di sheet tidak tertimpa.
+    if (ada || Date.now() - terakhirTarikEdit > 30000) {
+      try { await tarikEditSheet(); terakhirTarikEdit = Date.now(); } catch (e) { console.error('Tarik edit sheet gagal:', e.message); }
+    }
+
+    for (;;) {
+      const { rows: [ev] } = await pool.query('select * from outbox where selesai is null and not gagal order by id limit 1');
+      if (!ev || ev.coba_lagi > new Date()) break;
+
+      let hasil;
+      try {
+        hasil = await panggilGas('syncDariDb', { jenis: ev.jenis, isi: ev.isi, foto: ev.foto, namaFile: ev.nama_file });
+      } catch (e) { await catatGagal(ev, e.message); break; }
+      if (!hasil.success) { await catatGagal(ev, hasil.message || 'syncDariDb gagal'); break; }
+
+      await tx(async c => {
+        await c.query('update outbox set selesai=now(), foto=null, error=null where id=$1', [ev.id]);
+        if ((ev.jenis === 'toko' || ev.jenis === 'tokoStop') && (hasil.fotoTerakhir || hasil.folderFoto)) {
+          await c.query(`update toko set foto_terakhir = coalesce(nullif($2, ''), foto_terakhir),
+            folder_foto = coalesce(nullif($3, ''), folder_foto) where id=$1`, [ev.isi.id, hasil.fotoTerakhir || '', hasil.folderFoto || '']);
+        } else if (ev.jenis === 'endCustomer' && hasil.foto) {
+          await c.query('update end_customer set foto=$2 where id=$1', [ev.isi.id, hasil.foto]);
+        }
+      });
+    }
+  } catch (e) {
+    console.error('Siklus sinkron error:', e.message);
+  } finally {
+    sinkronJalan = false;
+  }
+}
+
+// ===== HTTP =====
+
+function kirim(res, status, obj) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(obj));
+}
+
+function kunciCocok(diberikan) {
+  const a = Buffer.from(String(diberikan || ''));
+  const b = Buffer.from(API_KEY);
+  return API_KEY.length >= 16 && a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'GET' && req.url === '/health') {
+    try {
+      const { rows: [s] } = await pool.query(`select count(*) filter (where selesai is null and not gagal)::int as antre,
+        count(*) filter (where gagal)::int as gagal from outbox`);
+      return kirim(res, 200, { ok: true, sinkron: SYNC_AKTIF, outboxAntre: s.antre, outboxGagal: s.gagal });
+    } catch (e) { return kirim(res, 503, { ok: false }); }
+  }
+  if (req.method !== 'POST') return kirim(res, 405, { success: false, message: 'Metode tidak diizinkan.' });
+  if (!kunciCocok(req.headers['x-api-key'])) return kirim(res, 401, { success: false, message: 'Tidak diizinkan.' });
+
+  const potongan = [];
+  let ukuran = 0;
+  for await (const p of req) {
+    ukuran += p.length;
+    if (ukuran > MAKS_BODY) return kirim(res, 413, { success: false, message: 'Data terlalu besar.' });
+    potongan.push(p);
+  }
+
+  let action, data;
+  try { ({ action, data } = JSON.parse(Buffer.concat(potongan).toString('utf8'))); } catch (e) {
+    return kirim(res, 400, { success: false, message: 'Body bukan JSON.' });
+  }
+  const fn = Object.prototype.hasOwnProperty.call(aksi, action) ? aksi[action] : null;
+  if (!fn) return kirim(res, 200, { success: false, message: 'Action API tidak dikenal.' });
+
+  try {
+    const hasil = await fn(data || {});
+    kirim(res, 200, hasil);
+    if (action.startsWith('submit')) setImmediate(siklusSinkron); // langsung cerminkan ke sheet
+  } catch (e) {
+    console.error(`Aksi ${action} error:`, e);
+    kirim(res, 200, { success: false, message: 'Gagal memproses API: ' + e.message });
+  }
+});
+
+async function mulai() {
+  if (API_KEY.length < 16) throw new Error('API_KEY wajib diisi (min 16 karakter).');
+  await pool.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
+  server.listen(3000, () => console.log(`API Super Muncul jalan di :3000 (sinkron ${SYNC_AKTIF ? 'AKTIF' : 'MATI'})`));
+  setInterval(siklusSinkron, 5000);
+}
+
+process.on('SIGTERM', () => server.close(() => pool.end().then(() => process.exit(0))));
+mulai().catch(e => { console.error(e); process.exit(1); });

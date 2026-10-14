@@ -1,0 +1,63 @@
+# Stack Super Muncul di VPS naraya -- TERPISAH dari stack naraya (project, network, volume sendiri).
+# Semua container dibatasi keras (mem_limit/cpus) supaya tidak pernah mengganggu produksi naraya.
+# Jalankan dari folder ini: docker compose up -d --build
+name: supermuncul
+
+x-log: &log
+  driver: json-file
+  options: { max-size: "5m", max-file: "2" }
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: supermuncul
+      POSTGRES_USER: supermuncul
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?isi PG_PASSWORD di .env}
+    # Setelan minimalis: data cuma ratusan baris, 20 koneksi lebih dari cukup.
+    command: >
+      postgres -c shared_buffers=24MB -c effective_cache_size=64MB -c work_mem=2MB
+      -c maintenance_work_mem=16MB -c max_connections=20 -c wal_buffers=1MB
+      -c max_wal_size=128MB -c min_wal_size=32MB -c max_worker_processes=2
+      -c max_parallel_workers=0 -c max_parallel_workers_per_gather=0
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supermuncul -d supermuncul"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 160m
+    memswap_limit: 160m
+    cpus: 0.5
+    pids_limit: 100
+    logging: *log
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PGHOST: db
+      PGDATABASE: supermuncul
+      PGUSER: supermuncul
+      PGPASSWORD: ${PG_PASSWORD}
+      NODE_OPTIONS: --max-old-space-size=72
+    ports:
+      - "127.0.0.1:8082:3000"   # hanya lokal; publik lewat Cloudflare Tunnel
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.5
+    pids_limit: 50
+    logging: *log
+
+volumes:
+  pgdata:

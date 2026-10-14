@@ -1,2 +1,8 @@
 .vercel
 .env*
+
+backend-prod/Secret.gs
+server/.env
+
+node_modules/
+!.env.example

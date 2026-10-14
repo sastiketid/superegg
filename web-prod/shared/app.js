@@ -44,6 +44,51 @@ function pantauPerubahan(fn, intervalMs = 60000) {
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') fn(); });
 }
 
+// ===== HUTANG DI FORM LAPORAN =====
+// Dipakai Laporan Satuan (prefix '') & modal laporan Manajemen Rute (prefix 'rl-'); id elemennya
+// sama persis selain prefix. `detail` = hasil getDetailToko ({telurDiWarung, hutang}).
+const HARGA_PER_BUTIR = 3500;
+const elHutang = (p, id) => document.getElementById(p + id);
+const angkaDariRupiah = teks => parseInt(String(teks || '').replace(/[^0-9]/g, ''), 10) || 0;
+const teksRupiah = n => 'Rp ' + Math.round(n || 0).toLocaleString('id-ID');
+
+// Selisih setoran yang diketik terhadap estimasi (telur terjual x harga); 0 kalau setoran >= estimasi.
+function hitungKekuranganSetoran(p, detail) {
+  const sisa = elHutang(p, 'sisa-telur').value;
+  if (sisa === '') return 0;
+  const estimasi = Math.max(0, (detail.telurDiWarung || 0) - (parseInt(sisa, 10) || 0)) * HARGA_PER_BUTIR;
+  return Math.max(0, estimasi - angkaDariRupiah(elHutang(p, 'total-setoran').value));
+}
+
+function perbaruiKekuranganSetoran(p, detail) {
+  const kurang = hitungKekuranganSetoran(p, detail);
+  elHutang(p, 'hutang-kurang-box').classList.toggle('hidden', kurang <= 0);
+  elHutang(p, 'hutang-kurang-teks').textContent = `Catat kekurangan ${teksRupiah(kurang)} sebagai hutang`;
+}
+
+function siapkanHutangLaporan(p, detail) {
+  const saldo = detail.hutang || 0;
+  elHutang(p, 'detail-hutang-row').classList.toggle('hidden', saldo <= 0);
+  elHutang(p, 'detail-hutang').textContent = teksRupiah(saldo);
+  elHutang(p, 'bayar-hutang-group').classList.toggle('hidden', saldo <= 0);
+  elHutang(p, 'bayar-hutang').value = '';
+  elHutang(p, 'hutang-kurang').checked = false;
+  perbaruiKekuranganSetoran(p, detail);
+}
+
+// Bayar dibatasi sisa hutang (server juga menolak kalau lebih).
+function ambilHutangLaporan(p, detail) {
+  return {
+    hutangBaru: elHutang(p, 'hutang-kurang').checked ? hitungKekuranganSetoran(p, detail) : 0,
+    bayarHutang: Math.min(angkaDariRupiah(elHutang(p, 'bayar-hutang').value), detail.hutang || 0)
+  };
+}
+
+function ringkasanHutangLaporan(h) {
+  return (h.hutangBaru ? `<p><strong>Hutang Baru:</strong> <span style="color:var(--danger)">${teksRupiah(h.hutangBaru)}</span></p>` : '') +
+    (h.bayarHutang ? `<p><strong>Bayar Hutang:</strong> <span style="color:var(--success)">${teksRupiah(h.bayarHutang)}</span></p>` : '');
+}
+
 // ===== PIN PETA BERNOMOR =====
 // SVG + dominant-baseline="central" supaya angka benar-benar di tengah lingkaran (versi div+flex
 // sebelumnya meleset karena metrik font & border di luar iconSize). Diameter melebar untuk 3 digit.

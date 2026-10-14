@@ -195,6 +195,8 @@
           <div class="rekap-tile"><div class="rekap-label">Toko Tutup</div><div class="rekap-value" id="rekap-tutup">0</div></div>
           <div class="rekap-tile"><div class="rekap-label">End User</div><div class="rekap-value" id="rekap-enduser">0 btr</div></div>
           <div class="rekap-tile"><div class="rekap-label">Titik Baru</div><div class="rekap-value" id="rekap-titikbaru">0</div></div>
+          <div class="rekap-tile"><div class="rekap-label">Hutang Baru</div><div class="rekap-value" id="rekap-hutangbaru" style="color:var(--danger);">Rp 0</div></div>
+          <div class="rekap-tile"><div class="rekap-label">Bayar Hutang</div><div class="rekap-value" id="rekap-bayarhutang" style="color:var(--success);">Rp 0</div></div>
         </div>
 
         <div class="rekap-tokotutup-list hidden" id="rekap-tokotutup-box">
@@ -268,10 +270,16 @@
               <span class="detail-label">3. Keterangan Terakhir</span>
               <span class="detail-value" id="rl-detail-keterangan">-</span>
             </div>
+            <div class="detail-row hidden" id="rl-detail-hutang-row">
+              <span class="detail-label">4. Hutang Belum Lunas</span>
+              <span class="detail-value" id="rl-detail-hutang" style="color: var(--danger);">-</span>
+            </div>
           </div>
 
           <div class="form-group"><label>Sisa Telur (Butir):</label><input type="number" id="rl-sisa-telur" placeholder="0" oninput="rlKalkulasiSetoranOtomatis()"></div>
-          <div class="form-group"><label>Total Setoran (Rp):</label><input type="text" inputmode="numeric" id="rl-total-setoran" placeholder="0" oninput="formatRupiahInput(this)"></div>
+          <div class="form-group"><label>Total Setoran (Rp):</label><input type="text" inputmode="numeric" id="rl-total-setoran" placeholder="0" oninput="formatRupiahInput(this); perbaruiKekuranganSetoran('rl-', rlTokoDetail)"></div>
+          <label class="cek-hutang hidden" id="rl-hutang-kurang-box"><input type="checkbox" id="rl-hutang-kurang"><span id="rl-hutang-kurang-teks"></span></label>
+          <div class="form-group hidden" id="rl-bayar-hutang-group"><label>Terima Bayar Hutang (Rp, opsional):</label><input type="text" inputmode="numeric" id="rl-bayar-hutang" placeholder="0" oninput="formatRupiahInput(this)"></div>
 
           <div class="form-group">
             <label>Status:</label>
@@ -1058,6 +1066,8 @@
         document.getElementById('rl-konfirmasi-section').classList.add('hidden');
         document.getElementById('rl-form-lanjutan').classList.remove('hidden');
         rlTampilTombol('ambil-foto');
+        rlTokoDetail = { nama: "", telurDiWarung: 0, keteranganTerakhir: "", hutang: 0 };
+        siapkanHutangLaporan('rl-', rlTokoDetail);
 
         document.getElementById('modal-laporan').classList.add('show');
 
@@ -1067,6 +1077,7 @@
           document.getElementById('rl-detail-nama').textContent = rlTokoDetail.nama;
           document.getElementById('rl-detail-telur').textContent = `${rlTokoDetail.telurDiWarung} butir`;
           document.getElementById('rl-detail-keterangan').textContent = rlTokoDetail.keteranganTerakhir || '-';
+          siapkanHutangLaporan('rl-', rlTokoDetail);
 
           const preview = document.getElementById('rl-keterangan-lama-preview');
           if (rlTokoDetail.keteranganTerakhir) {
@@ -1101,6 +1112,7 @@
           inputSetoran.value = estimasi.toString();
           formatRupiahInput(inputSetoran);
         }
+        perbaruiKekuranganSetoran('rl-', rlTokoDetail);
       }
 
       function rlTriggerKamera() {
@@ -1163,6 +1175,7 @@
           <p><strong>Waktu:</strong> ${rlTimestamp}</p><p><strong>Toko:</strong> ${rlTokoDetail.nama}</p>
           <p><strong>Sisa Telur:</strong> ${sisa} butir</p><p><strong>Setoran:</strong> ${setoran}</p>
           <p><strong>Status:</strong> ${statusTeks}</p><p><strong>Keterangan:</strong> ${keteranganTeks}</p>
+          ${ringkasanHutangLaporan(ambilHutangLaporan('rl-', rlTokoDetail))}
         `;
         rlCetakWatermark();
         document.getElementById('rl-konfirmasi-section').classList.remove('hidden');
@@ -1188,6 +1201,7 @@
             let status = document.getElementById('rl-status-val').value;
             let sisaTelurAngka = parseInt(document.getElementById('rl-sisa-telur').value, 10) || 0;
             let restockAngka = (status === 'Restock') ? (parseInt(document.getElementById('rl-jumlah-restock').value, 10) || 0) : 0;
+            const hutangLaporan = ambilHutangLaporan('rl-', rlTokoDetail);
 
             let payload = {
               storeId: stopAktifId,
@@ -1198,6 +1212,7 @@
               jumlahRestock: restockAngka,
               keterangan: document.getElementById('rl-keterangan').value,
               keteranganTouched: rlKeteranganTouched,
+              ...hutangLaporan,
               timestamp: rlTimestamp,
               fotoBase64: fotoBase64
             };
@@ -1211,6 +1226,8 @@
                   stop.setoran = setoranMurni;
                   stop.restock = restockAngka;
                   stop.sisaTelur = sisaTelurAngka;
+                  stop.hutangBaru = hutangLaporan.hutangBaru;
+                  stop.bayarHutang = hutangLaporan.bayarHutang;
                   simpanRuteAktif();
                 }
                 tutupModalLaporan();
@@ -1339,13 +1356,15 @@
       // ===== TAHAP 4: REKAP RUTE =====
 
       function hitungRekap() {
-        let totalSetoran = 0, totalRestock = 0, totalSisaTelur = 0;
+        let totalSetoran = 0, totalRestock = 0, totalSisaTelur = 0, totalHutangBaru = 0, totalBayarHutang = 0;
         const tokoTutup = [];
         ruteAktif.stops.forEach(s => {
           if (s.status === 'dilapor') {
             totalSetoran += s.setoran;
             totalRestock += s.restock;
             totalSisaTelur += s.sisaTelur;
+            totalHutangBaru += s.hutangBaru || 0;
+            totalBayarHutang += s.bayarHutang || 0;
           } else if (s.status === 'tutup') {
             tokoTutup.push(s.nama);
           }
@@ -1356,11 +1375,12 @@
         const totalEndUser = endUser.reduce((n, e) => n + (e.jumlah || 0), 0);
         totalSetoran += endUser.reduce((n, e) => n + (e.uang || 0), 0);
         const totalTitikBaru = ruteAktif.stops.filter(s => s.titikBaru).length;
+        totalSetoran += totalBayarHutang; // uang bayar hutang ikut dipegang sales
         const telurKeluar = totalRestock + totalEndUser;
         const telurAwal = ruteAktif.stokBawa || 0;
         const sisaTelurBaru = telurAwal - telurKeluar;
         const totalTokoDikunjungi = ruteAktif.stops.length; // jumlah toko yang masuk list sektor rute ini
-        return { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru, endUser };
+        return { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru, endUser, totalHutangBaru, totalBayarHutang };
       }
 
       function tampilkanRekap() {
@@ -1372,7 +1392,9 @@
 
         document.getElementById('rekap-tanggal-lock').textContent = formatTanggalIndo(new Date(ruteAktif.createdAt));
 
-        const { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru } = hitungRekap();
+        const { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru, totalHutangBaru, totalBayarHutang } = hitungRekap();
+        document.getElementById('rekap-hutangbaru').textContent = formatRupiah(totalHutangBaru);
+        document.getElementById('rekap-bayarhutang').textContent = formatRupiah(totalBayarHutang);
         document.getElementById('rekap-enduser').textContent = `${totalEndUser} btr`;
         document.getElementById('rekap-titikbaru').textContent = totalTitikBaru;
         document.getElementById('rekap-toko-dikunjungi-teks').textContent = `Toko Dikunjungi : ${totalTokoDikunjungi}`;
@@ -1406,7 +1428,7 @@
         tampilLoadingTombol(btn);
 
         const tanggal = formatTanggalIndo(new Date(ruteAktif.createdAt));
-        const { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru, endUser } = hitungRekap();
+        const { totalSetoran, telurKeluar, totalSisaTelur, tokoTutup, telurAwal, sisaTelurBaru, totalTokoDikunjungi, totalEndUser, totalTitikBaru, endUser, totalHutangBaru, totalBayarHutang } = hitungRekap();
 
         let teks = `*REKAP RUTE - ${tanggal}*\n\n`;
         teks += `Toko Dikunjungi: ${totalTokoDikunjungi}\n`;
@@ -1414,7 +1436,8 @@
         teks += `Telur Keluar: ${telurKeluar} butir (End User: ${totalEndUser} butir)\n`;
         teks += `Sisa Telur Baru: ${sisaTelurBaru} butir\n`;
         teks += `Telur Retur: ${totalSisaTelur} butir\n`;
-        teks += `Total Setoran: ${formatRupiah(totalSetoran)}\n`;
+        teks += `Total Setoran: ${formatRupiah(totalSetoran)}${totalBayarHutang ? ` (termasuk bayar hutang ${formatRupiah(totalBayarHutang)})` : ''}\n`;
+        if (totalHutangBaru) teks += `Hutang Baru: ${formatRupiah(totalHutangBaru)}\n`;
         teks += `Toko Tutup: ${tokoTutup.length}\n`;
         teks += `Titik Baru: ${totalTitikBaru}\n`;
         if (endUser.length > 0) {

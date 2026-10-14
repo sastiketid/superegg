@@ -62,12 +62,15 @@
         submitLaporanSatuan: ['Laporan', '#4F46E5', d => [d.namaToko || 'Laporan Toko', [
           `Status: ${d.status}${d.status === 'Restock' ? ` (${d.jumlahRestock} btr)` : ''}`,
           `Sisa telur: ${d.sisaTelur} btr · Setoran: ${rp(d.totalSetoran)}`,
-          d.keteranganTouched && d.keterangan ? `Ket: ${d.keterangan}` : ''
+          d.keteranganTouched && d.keterangan ? `Ket: ${d.keterangan}` : '',
+          d.hutangBaru ? `Hutang baru: ${rp(d.hutangBaru)}` : '',
+          d.bayarHutang ? `Bayar hutang: ${rp(d.bayarHutang)}` : ''
         ]]],
         ruteSelesai: ['Rute', '#10B981', d => ['Rekap Rute Selesai', [
           `Toko: ${d.totalTokoDikunjungi} · Tutup: ${(d.tokoTutup || []).length} · Titik baru: ${d.totalTitikBaru || 0}`,
           `Telur awal: ${d.telurAwal} · Keluar: ${d.telurKeluar} · Sisa: ${d.sisaTelurBaru} · Retur: ${d.totalSisaTelur} btr`,
-          `Total setoran: ${rp(d.totalSetoran)}`
+          `Total setoran: ${rp(d.totalSetoran)}`,
+          d.totalHutangBaru ? `Hutang baru: ${rp(d.totalHutangBaru)} · Bayar hutang: ${rp(d.totalBayarHutang)}` : ''
         ]]],
         submitTitikBaru: ['Titik Baru', '#8B5CF6', d => [d.namaWarung, [`Pemilik: ${d.pemilik} · ${d.hp}`, `Drop awal: ${d.jumlahAwal} btr`]]],
         submitPembeliEndUser: ['End User', '#F59E0B', d => [d.namaCustomer, [`${d.jumlahBeli} btr · Sales: ${d.namaSales}`, d.hp]]],

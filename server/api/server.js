@@ -20,6 +20,21 @@ async function antre(c, jenis, isi, foto = null, namaFile = null) {
   await c.query('insert into outbox (jenis, isi, foto, nama_file) values ($1, $2, $3, $4)', [jenis, isi, foto, namaFile]);
 }
 
+// Saldo hutang satu toko. Dicocokkan lewat ID toko ATAU nama (catatan hutang lama/manual
+// cuma punya nama) -- sama seperti halaman Catatan Hutang yang mengelompokkan per nama.
+async function saldoHutangToko(db, t) {
+  const { rows: [r] } = await db.query(`select coalesce(sum(case when tipe = 'Bayar' then -jumlah else jumlah end), 0) as saldo
+    from hutang where toko_id = $1 or lower(trim(nama)) = lower(trim($2))`, [t.id, t.nama]);
+  return Math.max(0, r.saldo);
+}
+
+async function catatHutang(c, h) {
+  const { rows: [r] } = await c.query(`insert into hutang (id, nama, tipe, jumlah, keterangan, sales, toko_id)
+    values ($1,$2,$3,$4,$5,$6,$7) returning *`,
+  [crypto.randomUUID(), h.nama, h.tipe, h.jumlah, h.keterangan || '', h.sales || '', h.storeId || '']);
+  await antre(c, 'hutang', { id: r.id, tanggal: r.tanggal.toISOString(), nama: r.nama, tipe: r.tipe, jumlah: r.jumlah, keterangan: r.keterangan, sales: r.sales, storeId: r.toko_id });
+}
+
 // ===== AKSI (nama & bentuk respons = Gateway.gs) =====
 
 const aksi = {
@@ -31,7 +46,7 @@ const aksi = {
   async getDetailToko(d) {
     const { rows: [t] } = await pool.query('select * from toko where id = $1 and aktif', [String(d.storeId || '')]);
     if (!t) return { success: false, message: 'Toko tidak ditemukan.' };
-    return { success: true, data: { nama: t.nama, pemilik: t.pemilik, telurDiWarung: t.stok, keteranganTerakhir: t.keterangan } };
+    return { success: true, data: { nama: t.nama, pemilik: t.pemilik, telurDiWarung: t.stok, keteranganTerakhir: t.keterangan, hutang: await saldoHutangToko(pool, t) } };
   },
 
   async getTokoUntukRute() {
@@ -69,6 +84,14 @@ const aksi = {
       const keterangan = d.keteranganTouched ? String(d.keterangan || '') : t.keterangan;
       const namaFile = `${q} - ${safeTs(d.timestamp)} - ${t.nama}.jpg`;
 
+      // Hutang dari form laporan: kekurangan setoran (hutang baru) & bayar hutang lama, satu transaksi.
+      const hutangBaru = Math.max(0, num(d.hutangBaru));
+      const bayarHutang = Math.max(0, num(d.bayarHutang));
+      if (bayarHutang > 0) {
+        const saldo = await saldoHutangToko(c, t);
+        if (bayarHutang > saldo) return { success: false, message: `Bayar hutang (Rp ${bayarHutang.toLocaleString('id-ID')}) melebihi sisa hutang toko (Rp ${saldo.toLocaleString('id-ID')}).` };
+      }
+
       await c.query('insert into laporan (toko_id, status, sisa_telur, setoran, restock, keterangan) values ($1,$2,$3,$4,$5,$6)',
         [t.id, d.status, sisaBaru, num(d.totalSetoran), restock, keterangan]);
 
@@ -76,15 +99,18 @@ const aksi = {
         const { rows: [u] } = await c.query(`update toko set aktif=false, riwayat_terjual=$2, riwayat_setoran=$3, riwayat_sisa=$4,
           total_kirim=$5, diperbarui=now() where id=$1 returning *`, [t.id, f, j, k, q]);
         await antre(c, 'tokoStop', keSnapshot(u), d.fotoBase64, namaFile);
-        return { success: true, message: `${t.nama} berhasil di-stop dan dipindah ke arsip.` };
+      } else {
+        const { rows: [u] } = await c.query(`update toko set riwayat_terjual=$2, stok=$3, kirim_terakhir=now(), setoran_terakhir=$4,
+          riwayat_setoran=$5, riwayat_sisa=$6, sisa_terakhir=$7, keterangan=$8, total_kirim=$9,
+          jadwal = case when trim(jadwal) = '' then $10 else jadwal end, diperbarui=now() where id=$1 returning *`,
+        [t.id, f, restock, num(d.totalSetoran), j, k, sisaBaru, keterangan, q, hariIniJakarta()]);
+        await antre(c, 'toko', keSnapshot(u), d.fotoBase64, namaFile);
       }
 
-      const { rows: [u] } = await c.query(`update toko set riwayat_terjual=$2, stok=$3, kirim_terakhir=now(), setoran_terakhir=$4,
-        riwayat_setoran=$5, riwayat_sisa=$6, sisa_terakhir=$7, keterangan=$8, total_kirim=$9,
-        jadwal = case when trim(jadwal) = '' then $10 else jadwal end, diperbarui=now() where id=$1 returning *`,
-      [t.id, f, restock, num(d.totalSetoran), j, k, sisaBaru, keterangan, q, hariIniJakarta()]);
-      await antre(c, 'toko', keSnapshot(u), d.fotoBase64, namaFile);
-      return { success: true, message: 'Laporan berhasil disimpan.' };
+      if (bayarHutang > 0) await catatHutang(c, { nama: t.nama, tipe: 'Bayar', jumlah: bayarHutang, keterangan: 'Dibayar saat laporan', storeId: t.id });
+      if (hutangBaru > 0) await catatHutang(c, { nama: t.nama, tipe: 'Hutang', jumlah: hutangBaru, keterangan: 'Kekurangan setoran laporan', storeId: t.id });
+
+      return { success: true, message: d.status === 'Stop' ? `${t.nama} berhasil di-stop dan dipindah ke arsip.` : 'Laporan berhasil disimpan.' };
     });
   },
 
@@ -124,10 +150,7 @@ const aksi = {
     if (jumlah <= 0) return { success: false, message: 'Jumlah harus lebih dari 0.' };
 
     return tx(async c => {
-      const { rows: [h] } = await c.query(`insert into hutang (id, nama, tipe, jumlah, keterangan, sales, toko_id)
-        values ($1,$2,$3,$4,$5,$6,$7) returning *`,
-      [crypto.randomUUID(), nama, d.tipe, jumlah, String(d.keterangan || ''), String(d.sales || ''), String(d.storeId || '')]);
-      await antre(c, 'hutang', { id: h.id, tanggal: h.tanggal.toISOString(), nama, tipe: h.tipe, jumlah, keterangan: h.keterangan, sales: h.sales, storeId: h.toko_id });
+      await catatHutang(c, { nama, tipe: d.tipe, jumlah, keterangan: String(d.keterangan || ''), sales: String(d.sales || ''), storeId: String(d.storeId || '') });
       const label = d.tipe === 'Bayar' ? 'Pembayaran' : 'Hutang';
       return { success: true, message: `${label} ${nama} berhasil dicatat.` };
     });

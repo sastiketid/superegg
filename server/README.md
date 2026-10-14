@@ -38,7 +38,11 @@ ssh naraya-vps 'curl -s 127.0.0.1:8082/health'
 Backend GAS: `cd backend-prod && clasp push -f && clasp deploy -i <ID deployment sinkron, ada di GAS_SYNC_URL .env VPS> -d "..."`
 (deployment sinkron; deployment produksi lama `AKfycbw8sb6...` dibiarkan untuk rollback).
 
-## Cutover (sekali, saat sepi — kiriman sales biasanya 19.00–23.00 WIB)
+## Cutover — SUDAH DILAKUKAN 14 Okt 2026 ±22.15 WIB
+
+Status: produksi memakai API ini. Route `supermuncul-api.imaga.site` → `http://localhost:8082` sudah ada di tunnel `naraya-vps`, env Vercel `API_URL` + `API_KEY` terpasang, `SYNC_AKTIF=1`. Cek setelah cutover: seluruh sheet vs DB identik (119 aktif + 49 stop), kiriman asli pertama (Stop + foto) tersinkron dalam 8 detik.
+
+Langkah di bawah dicatat untuk referensi (mis. memindahkan ke server lain):
 
 1. Cloudflare Zero Trust → Tunnel naraya → Public Hostname baru, mis. `supermuncul-api.imaga.site` → `http://localhost:8082`. Cek: `curl https://supermuncul-api.imaga.site/health`.
 2. Vercel: set `API_URL=https://supermuncul-api.imaga.site/` dan `API_KEY` (= `.env` VPS), lalu `vercel --prod --cwd web-prod`.

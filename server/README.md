@@ -62,3 +62,6 @@ Kiriman yang sempat masuk DB sudah tercermin di sheet selama sinkron aktif. Fitu
 - Backup ada di VPS yang sama; cadangan di luar VPS = spreadsheet (toko, end customer, hutang). Tabel `laporan` (log per kunjungan) hanya ada di DB/backup.
 - Semua deployment GAS (selain HEAD) diarahkan ke versi terkunci: aksi lama ditolak, cuma aksi sinkron (wajib secret) yang jalan.
 - `import.js` hanya untuk sebelum cutover; setelahnya DB adalah sumber utama.
+- **Selaraskan sheet dari DB** (mis. setelah restore backup): `docker compose exec -T api node selaraskan.js --cek` untuk melihat rencana, lalu tanpa `--cek` untuk mengantrikan perbaikan (hapus baris yang tidak ada di DB, tulis ulang yang beda/hilang di MASTER_WARUNG, WARUNG_STOP, END_CUSTOMER, HUTANG).
+- **Kebalikannya (DB dari sheet)**, kalau spreadsheet yang dijadikan acuan: backup dulu, `docker compose stop api`, `docker compose run --rm --no-deps -T api node import.js --buang-data-tes` (mengosongkan juga riwayat laporan & outbox), lalu `docker compose start api`. Tanyakan dulu mana yang jadi acuan.
+- SSH ke VPS hanya lewat Tailscale (UFW deny incoming + fail2ban). Jangan mengulang koneksi SSH beruntun saat jaringan goyah; kalau terblokir: Web Console SumoPod -> `sudo fail2ban-client unban --all`.

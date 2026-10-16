@@ -15,6 +15,8 @@ const MAKS_BODY = 15 * 1024 * 1024;
 const byNama = (a, b) => a.nama.localeCompare(b.nama);
 const safeTs = ts => String(ts || '').replace(/[\/:]/g, '-');
 const fotoValid = f => typeof f === 'string' && /^data:image\/[a-z+]+;base64,/.test(f);
+const koordinatValid = (lat, lng) => Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+const teksLatLong = (lat, lng) => `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
 
 async function antre(c, jenis, isi, foto = null, namaFile = null) {
   await c.query('insert into outbox (jenis, isi, foto, nama_file) values ($1, $2, $3, $4)', [jenis, isi, foto, namaFile]);
@@ -108,7 +110,7 @@ const aksi = {
       }
 
       if (bayarHutang > 0) await catatHutang(c, { nama: t.nama, tipe: 'Bayar', jumlah: bayarHutang, keterangan: 'Dibayar saat laporan', storeId: t.id });
-      if (hutangBaru > 0) await catatHutang(c, { nama: t.nama, tipe: 'Hutang', jumlah: hutangBaru, keterangan: 'Kekurangan setoran laporan', storeId: t.id });
+      if (hutangBaru > 0) await catatHutang(c, { nama: t.nama, tipe: 'Hutang', jumlah: hutangBaru, keterangan: String(d.hutangKeterangan || '').trim().slice(0, 200) || 'Dicatat saat laporan', storeId: t.id });
 
       return { success: true, message: d.status === 'Stop' ? `${t.nama} berhasil di-stop dan dipindah ke arsip.` : 'Laporan berhasil disimpan.' };
     });
@@ -126,6 +128,48 @@ const aksi = {
       [id, nama, String(d.pemilik || ''), String(d.hp || ''), `${d.lat}, ${d.long}`, num(d.jumlahAwal), String(d.keterangan || ''), hariIniJakarta()]);
       await antre(c, 'toko', keSnapshot(u), d.fotoBase64, `1 - ${safeTs(d.timestamp)} - ${nama}.jpg`);
       return { success: true, message: `${nama} berhasil didaftarkan sebagai titik baru!`, id };
+    });
+  },
+
+  // Daftar toko stop untuk diaktifkan kembali (termasuk yang koordinatnya kosong -- diisi GPS baru).
+  async getTokoStop() {
+    const { rows } = await pool.query("select id, nama, pemilik, hp, total_kirim from toko where not aktif and nama <> ''");
+    return rows.map(r => ({ id: r.id, nama: r.nama, pemilik: r.pemilik, hp: r.hp, totalKirim: r.total_kirim })).sort(byNama);
+  },
+
+  // Toko stop aktif lagi: data lama (riwayat, folder foto, jadwal) tetap, titipan mulai dari drop baru.
+  // Sinkron 'toko' menulis ulang baris MASTER_WARUNG & membuang barisnya dari WARUNG_STOP (SyncService.gs).
+  async aktifkanToko(d) {
+    if (!fotoValid(d.fotoBase64)) return { success: false, message: 'Foto wajib ada.' };
+    const lat = Number(d.lat), lng = Number(d.long);
+    if (!koordinatValid(lat, lng)) return { success: false, message: 'Lokasi GPS tidak valid.' };
+
+    return tx(async c => {
+      const { rows: [t] } = await c.query('select * from toko where id = $1 and not aktif for update', [String(d.storeId || '')]);
+      if (!t) return { success: false, message: 'Toko stop tidak ditemukan (mungkin sudah aktif).' };
+      const nama = String(d.namaWarung || '').trim() || t.nama;
+      const q = t.total_kirim + 1;
+      const { rows: [u] } = await c.query(`update toko set aktif=true, nama=$2, pemilik=$3, hp=$4, latlong=$5, stok=$6, kirim_terakhir=now(),
+        setoran_terakhir=0, sisa_terakhir=0, keterangan=$7, total_kirim=$8, jadwal = case when trim(jadwal) = '' then $9 else jadwal end,
+        diperbarui=now() where id=$1 returning *`,
+      [t.id, nama, String(d.pemilik ?? t.pemilik), String(d.hp ?? t.hp), teksLatLong(lat, lng), num(d.jumlahAwal),
+        String(d.keterangan || ''), q, hariIniJakarta()]);
+      await c.query('insert into laporan (toko_id, status, sisa_telur, setoran, restock, keterangan) values ($1, $2, 0, 0, $3, $4)',
+        [t.id, 'Aktif Kembali', num(d.jumlahAwal), u.keterangan]);
+      await antre(c, 'toko', keSnapshot(u), d.fotoBase64, `${q} - ${safeTs(d.timestamp)} - ${nama}.jpg`);
+      return { success: true, message: `${nama} aktif kembali dan masuk ke daftar toko.`, id: t.id };
+    });
+  },
+
+  async updateLokasiToko(d) {
+    const lat = Number(d.lat), lng = Number(d.lng);
+    if (!koordinatValid(lat, lng)) return { success: false, message: 'Koordinat tidak valid.' };
+    return tx(async c => {
+      const { rows: [u] } = await c.query('update toko set latlong = $2, diperbarui = now() where id = $1 and aktif returning *',
+        [String(d.storeId || ''), teksLatLong(lat, lng)]);
+      if (!u) return { success: false, message: 'Toko tidak ditemukan.' };
+      await antre(c, 'toko', keSnapshot(u));
+      return { success: true, message: `Lokasi ${u.nama} diperbarui.` };
     });
   },
 
@@ -163,12 +207,19 @@ const aksi = {
 // manual: update outbox set gagal=false, percobaan=0 where gagal).
 
 let sinkronJalan = false;
+const JEDA_TARIK_EDIT = 20000;
 let terakhirTarikEdit = 0;
 
+// Simpan dulu ke DB, baru ack ke GAS supaya antrian dihapus. Kalau ack gagal, tarikan berikutnya
+// mengembalikan data yang sama -- upsert penuh, jadi aman diulang.
 async function tarikEditSheet() {
   const hasil = await panggilGas('ambilEditSheet');
   if (!hasil.success) throw new Error(hasil.message || 'ambilEditSheet gagal');
   for (const t of hasil.data) if (t.id && t.nama) await upsertTokoDariSheet(pool, t);
+  if (hasil.jumlahAntrian) {
+    const ack = await panggilGas('ackEditSheet', { jumlah: hasil.jumlahAntrian });
+    if (!ack.success) throw new Error(ack.message || 'ackEditSheet gagal');
+  }
   if (hasil.data.length) console.log(`Tarik edit sheet: ${hasil.data.length} toko diperbarui`);
 }
 
@@ -186,8 +237,12 @@ async function siklusSinkron() {
   try {
     const { rows: [ada] } = await pool.query('select 1 from outbox where selesai is null and not gagal limit 1');
     // Tarik edit manual DULU sebelum kirim snapshot, supaya edit pemilik di sheet tidak tertimpa.
-    if (ada || Date.now() - terakhirTarikEdit > 30000) {
-      try { await tarikEditSheet(); terakhirTarikEdit = Date.now(); } catch (e) { console.error('Tarik edit sheet gagal:', e.message); }
+    // Kalau tarikan gagal, outbox JANGAN dikirim di siklus ini (snapshot DB bisa lebih lama dari sheet).
+    if (ada || Date.now() - terakhirTarikEdit > JEDA_TARIK_EDIT) {
+      try { await tarikEditSheet(); terakhirTarikEdit = Date.now(); } catch (e) {
+        console.error('Tarik edit sheet gagal:', e.message);
+        return;
+      }
     }
 
     for (;;) {
@@ -224,10 +279,34 @@ function kirim(res, status, obj) {
   res.end(JSON.stringify(obj));
 }
 
-function kunciCocok(diberikan) {
+function rahasiaCocok(diberikan, seharusnya) {
   const a = Buffer.from(String(diberikan || ''));
-  const b = Buffer.from(API_KEY);
-  return API_KEY.length >= 16 && a.length === b.length && crypto.timingSafeEqual(a, b);
+  const b = Buffer.from(String(seharusnya || ''));
+  return b.length >= 16 && a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+async function bacaJson(req) {
+  const potongan = [];
+  let ukuran = 0;
+  for await (const p of req) {
+    ukuran += p.length;
+    if (ukuran > MAKS_BODY) throw Object.assign(new Error('Data terlalu besar.'), { status: 413 });
+    potongan.push(p);
+  }
+  try { return JSON.parse(Buffer.concat(potongan).toString('utf8')); } catch (e) {
+    throw Object.assign(new Error('Body bukan JSON.'), { status: 400 });
+  }
+}
+
+// Push dari trigger onEdit (installable) GAS: baris MASTER_WARUNG yang baru diedit, langsung
+// masuk DB dalam hitungan detik. Tarikan berkala (ambilEditSheet + ack) tetap jalan sebagai cadangan.
+async function terimaEditSheet(req, res) {
+  if (!rahasiaCocok(req.headers['x-sync-secret'], process.env.SYNC_SECRET)) return kirim(res, 401, { success: false, message: 'Tidak diizinkan.' });
+  const { toko } = await bacaJson(req);
+  let n = 0;
+  for (const t of Array.isArray(toko) ? toko : []) if (t && t.id && t.nama) { await upsertTokoDariSheet(pool, t); n++; }
+  if (n) console.log(`Push edit sheet: ${n} toko diperbarui`);
+  kirim(res, 200, { success: true, jumlah: n });
 }
 
 const server = http.createServer(async (req, res) => {
@@ -235,23 +314,19 @@ const server = http.createServer(async (req, res) => {
     try {
       const { rows: [s] } = await pool.query(`select count(*) filter (where selesai is null and not gagal)::int as antre,
         count(*) filter (where gagal)::int as gagal from outbox`);
-      return kirim(res, 200, { ok: true, sinkron: SYNC_AKTIF, outboxAntre: s.antre, outboxGagal: s.gagal });
+      return kirim(res, 200, { ok: true, sinkron: SYNC_AKTIF, outboxAntre: s.antre, outboxGagal: s.gagal,
+        tarikEditTerakhir: terakhirTarikEdit ? new Date(terakhirTarikEdit).toISOString() : null });
     } catch (e) { return kirim(res, 503, { ok: false }); }
   }
   if (req.method !== 'POST') return kirim(res, 405, { success: false, message: 'Metode tidak diizinkan.' });
-  if (!kunciCocok(req.headers['x-api-key'])) return kirim(res, 401, { success: false, message: 'Tidak diizinkan.' });
-
-  const potongan = [];
-  let ukuran = 0;
-  for await (const p of req) {
-    ukuran += p.length;
-    if (ukuran > MAKS_BODY) return kirim(res, 413, { success: false, message: 'Data terlalu besar.' });
-    potongan.push(p);
+  if (req.url === '/sheet-edit') {
+    return terimaEditSheet(req, res).catch(e => kirim(res, e.status || 500, { success: false, message: e.message }));
   }
+  if (!rahasiaCocok(req.headers['x-api-key'], API_KEY)) return kirim(res, 401, { success: false, message: 'Tidak diizinkan.' });
 
   let action, data;
-  try { ({ action, data } = JSON.parse(Buffer.concat(potongan).toString('utf8'))); } catch (e) {
-    return kirim(res, 400, { success: false, message: 'Body bukan JSON.' });
+  try { ({ action, data } = await bacaJson(req)); } catch (e) {
+    return kirim(res, e.status || 400, { success: false, message: e.message });
   }
   const fn = Object.prototype.hasOwnProperty.call(aksi, action) ? aksi[action] : null;
   if (!fn) return kirim(res, 200, { success: false, message: 'Action API tidak dikenal.' });
@@ -259,7 +334,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const hasil = await fn(data || {});
     kirim(res, 200, hasil);
-    if (action.startsWith('submit')) setImmediate(siklusSinkron); // langsung cerminkan ke sheet
+    if (action.startsWith('submit') || action === 'aktifkanToko' || action === 'updateLokasiToko') setImmediate(siklusSinkron); // langsung cerminkan ke sheet
   } catch (e) {
     console.error(`Aksi ${action} error:`, e);
     kirim(res, 200, { success: false, message: 'Gagal memproses API: ' + e.message });

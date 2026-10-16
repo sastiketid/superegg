@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Super Muncul - Perbarui Lokasi Toko</title>
+    <link rel="icon" href="favicon.ico">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="theme-color" content="#4F46E5">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+    <link rel="stylesheet" href="shared/style.css">
+    <style>
+      .map-lokasi { width: 100%; height: 280px; border-radius: 12px; border: 1.5px solid #E5E7EB; margin-bottom: 12px; z-index: 1; }
+      .toko-pilih-list { max-height: 60vh; overflow-y: auto; margin-top: 10px; border: 1px solid #E5E7EB; border-radius: 12px; }
+      .toko-pilih-item { padding: 12px 14px; border-bottom: 1px solid #E5E7EB; cursor: pointer; font-weight: 600; font-size: 14.5px; }
+      .toko-pilih-item:last-child { border-bottom: none; }
+      .toko-pilih-item:active { background: #EEF2FF; }
+      .toko-pilih-item small { display: block; font-weight: 500; font-size: 12px; color: var(--text-muted); }
+      .lokasi-info { font-size: 13px; line-height: 1.5; background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; }
+      .lokasi-info b { color: var(--text-main); }
+      .lokasi-info .baru { color: var(--primary); }
+      .baris-input { display: flex; gap: 8px; }
+      .baris-input input { flex: 1; min-width: 0; }
+      .baris-input button { width: auto; margin: 0; padding: 0 14px; font-size: 13px; }
+      .petunjuk { font-size: 12px; color: var(--text-muted); margin: 6px 0 0; }
+      .pin-baru { width: 22px; height: 22px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--danger); border: 3px solid #FFF; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
+    </style>
+  </head>
+  <body>
+
+    <div id="custom-alert" class="modal-overlay">
+      <div class="modal-content">
+        <div id="alert-icon" class="modal-icon"></div>
+        <h3 id="alert-title" class="modal-title">Info</h3>
+        <p id="alert-text" class="modal-text">Pesan</p>
+        <button onclick="tutupAlert()" class="btn-primary" id="alert-btn">Mengerti</button>
+      </div>
+    </div>
+
+    <div class="container">
+      <div class="feature-header">
+        <button class="btn-back-icon" id="btn-header-back" onclick="kembali()" aria-label="Kembali">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <h2>Perbarui Lokasi Toko</h2>
+      </div>
+
+      <div class="scroll-area has-sticky-bottom">
+        <div id="pilih-section">
+          <input type="text" id="cari-toko" placeholder="Memuat daftar toko..." oninput="renderDaftar()" autocomplete="off">
+          <div id="list-toko" class="toko-pilih-list"></div>
+        </div>
+
+        <div id="atur-section" class="hidden">
+          <div id="map-lokasi" class="map-lokasi"></div>
+          <div class="lokasi-info" id="lokasi-info"></div>
+          <button type="button" class="btn-primary" style="margin-top:0;" onclick="pakaiLokasiSaya()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+            Pakai Lokasi Saya Sekarang
+          </button>
+          <div class="form-group" style="margin-top:10px;">
+            <label>Atau isi koordinat / tempel link Google Maps:</label>
+            <div class="baris-input">
+              <input type="text" id="input-koordinat" placeholder="-7.55372, 110.83121" autocomplete="off">
+              <button type="button" class="btn-secondary" onclick="terapkanInput()">Terapkan</button>
+            </div>
+            <p class="petunjuk">Bisa juga geser pin merah di peta ke titik yang benar.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sticky-bottom hidden" id="bar-simpan">
+      <div class="sticky-bottom-inner">
+        <button class="btn-success" id="btn-simpan" onclick="simpanLokasi()">Simpan Lokasi Baru</button>
+      </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <script src="shared/app.js"></script>
+    <script>
+      let dropdownData = {};
+      let daftarToko = [];
+      let toko = null;       // toko yang sedang diatur
+      let lokasiBaru = null; // {lat, lng}
+      let map = null, pinLama = null, pinBaru = null, gps = null;
+      const param = new URLSearchParams(location.search);
+
+      const ikonPinBaru = () => L.divIcon({ className: '', html: '<div class="pin-baru"></div>', iconSize: [22, 22], iconAnchor: [11, 22] });
+      const fmt = p => `${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}`;
+      const adaKoordinat = t => typeof t.lat === 'number' && typeof t.lng === 'number';
+      function jarakMeter(a, b) {
+        const R = 6371000, r = x => x * Math.PI / 180;
+        const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(h));
+      }
+
+      function kembali() {
+        if (toko && !param.get('id')) { toko = null; tampilPilih(); return; }
+        location.href = dibukaDariRute() ? 'manajemen-rute.html' : 'index.html';
+      }
+
+      function renderDaftar() {
+        const q = document.getElementById('cari-toko').value.trim().toLowerCase();
+        const list = document.getElementById('list-toko');
+        const tampil = daftarToko.filter(t => t.nama.toLowerCase().includes(q));
+        list.innerHTML = tampil.length ? '' : '<div class="toko-pilih-item"><small>Tidak ada toko ditemukan.</small></div>';
+        tampil.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'toko-pilih-item';
+          item.textContent = t.nama;
+          const sub = document.createElement('small');
+          sub.textContent = adaKoordinat(t) ? fmt(t) : '⚠ lokasi belum valid';
+          if (!adaKoordinat(t)) sub.style.color = 'var(--danger)';
+          item.appendChild(sub);
+          item.onclick = () => pilihToko(t);
+          list.appendChild(item);
+        });
+      }
+
+      function tampilPilih() {
+        document.getElementById('pilih-section').classList.remove('hidden');
+        document.getElementById('atur-section').classList.add('hidden');
+        document.getElementById('bar-simpan').classList.add('hidden');
+        renderDaftar();
+      }
+
+      function pilihToko(t) {
+        toko = t;
+        lokasiBaru = null;
+        document.getElementById('input-koordinat').value = '';
+        document.getElementById('pilih-section').classList.add('hidden');
+        document.getElementById('atur-section').classList.remove('hidden');
+        document.getElementById('bar-simpan').classList.remove('hidden');
+        if (!map) {
+          map = L.map('map-lokasi');
+          L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps', maxZoom: 20 }).addTo(map);
+          gps = pantauLokasiSaya(map);
+        }
+        if (pinLama) { map.removeLayer(pinLama); pinLama = null; }
+        if (pinBaru) { map.removeLayer(pinBaru); pinBaru = null; }
+        setTimeout(() => map.invalidateSize(), 100);
+        if (adaKoordinat(t)) {
+          pinLama = L.marker([t.lat, t.lng], { icon: buatIkonNomor('●', '#9CA3AF') }).addTo(map).bindTooltip('Lokasi lama');
+          map.setView([t.lat, t.lng], 17);
+          setLokasiBaru({ lat: t.lat, lng: t.lng }, false);
+        } else {
+          // Koordinat lama kosong/rusak: mulai dari lokasi HP (kalau sudah terbaca) atau pusat area.
+          const awal = gps && gps.posisi ? gps.posisi : { lat: -7.5666, lng: 110.8166 };
+          map.setView([awal.lat, awal.lng], gps && gps.posisi ? 17 : 13);
+          document.getElementById('lokasi-info').innerHTML = `<b>${escHtml(t.nama)}</b><br>Lama: <span style="color:var(--danger)">belum ada / tidak valid</span><br>Tekan "Pakai Lokasi Saya Sekarang" atau isi koordinat.`;
+        }
+      }
+
+      // Pin merah = lokasi baru (bisa digeser). Info menampilkan lama vs baru + jarak geser.
+      function setLokasiBaru(p, geserPeta = true) {
+        lokasiBaru = p;
+        if (!pinBaru) {
+          pinBaru = L.marker([p.lat, p.lng], { icon: ikonPinBaru(), draggable: true, zIndexOffset: 1000 }).addTo(map);
+          pinBaru.on('dragend', () => { const ll = pinBaru.getLatLng(); setLokasiBaru({ lat: ll.lat, lng: ll.lng }, false); });
+        } else pinBaru.setLatLng([p.lat, p.lng]);
+        if (geserPeta) map.setView([p.lat, p.lng], Math.max(map.getZoom(), 17));
+        const lama = adaKoordinat(toko);
+        const geser = lama ? jarakMeter(toko, p) : null;
+        document.getElementById('lokasi-info').innerHTML =
+          `<b>${escHtml(toko.nama)}</b><br>Lama: ${lama ? fmt(toko) : '<span style="color:var(--danger)">belum ada / tidak valid</span>'}<br><span class="baru">Baru: ${fmt(p)}</span>` +
+          (geser === null ? '' : geser >= 1 ? ` (geser ${geser < 1000 ? Math.round(geser) + ' m' : (geser / 1000).toFixed(2) + ' km'})` : ' (belum berubah)');
+      }
+
+      function pakaiLokasiSaya() {
+        if (gps && gps.posisi) return pakaiPosisi(gps.posisi);
+        if (!navigator.geolocation) return tampilAlert('error', 'Tidak Mendukung', 'Browser ini tidak mendukung GPS.');
+        navigator.geolocation.getCurrentPosition(
+          p => pakaiPosisi({ lat: p.coords.latitude, lng: p.coords.longitude, akurasi: p.coords.accuracy }),
+          () => tampilAlert('warning', 'GPS Ditolak', 'Pastikan GPS aktif dan izin lokasi untuk aplikasi ini diberikan.'),
+          { enableHighAccuracy: true, timeout: 15000 });
+      }
+
+      function pakaiPosisi(p) {
+        setLokasiBaru({ lat: p.lat, lng: p.lng });
+        if (p.akurasi > 50) tampilAlert('warning', 'Akurasi GPS Rendah', `Akurasi sekitar ${Math.round(p.akurasi)} m. Tunggu sebentar di luar ruangan lalu tekan lagi, atau geser pin secara manual.`);
+      }
+
+      function terapkanInput() {
+        const p = parseKoordinatInput(document.getElementById('input-koordinat').value);
+        if (!p) return tampilAlert('warning', 'Koordinat Tidak Dikenali', 'Contoh format: -7.55372, 110.83121 atau link Google Maps yang berisi koordinat.');
+        setLokasiBaru(p);
+      }
+
+      async function simpanLokasi() {
+        if (!toko) return;
+        if (!lokasiBaru) return tampilAlert('warning', 'Lokasi Belum Diisi', 'Pakai lokasi saya, isi koordinat, atau geser pin dulu.');
+        if (adaKoordinat(toko) && jarakMeter(toko, lokasiBaru) < 1) return tampilAlert('warning', 'Belum Berubah', 'Lokasi baru masih sama dengan lokasi lama.');
+        const btn = document.getElementById('btn-simpan');
+        tampilLoadingTombol(btn);
+        try {
+          const res = await jalankanFetchAPI('updateLokasiToko', { storeId: toko.id, lat: lokasiBaru.lat, lng: lokasiBaru.lng });
+          if (!res.success) return tampilAlert('error', 'Gagal', res.message || 'Terjadi kesalahan.');
+          // Rute aktif ikut pakai koordinat baru (tombol navigasi & peta) tanpa menunggu refresh.
+          const rute = ambilRuteAktif();
+          const stop = rute && rute.stops.find(s => s.id === toko.id);
+          if (stop) { stop.lat = lokasiBaru.lat; stop.lng = lokasiBaru.lng; simpanRuteAktifKeStorage(rute); }
+          const t = daftarToko.find(x => x.id === toko.id);
+          if (t) { t.lat = lokasiBaru.lat; t.lng = lokasiBaru.lng; }
+          toko = { ...toko, ...lokasiBaru };
+          tampilAlert('success', 'Tersimpan', res.message, () => {
+            if (param.get('id')) location.href = dibukaDariRute() ? 'manajemen-rute.html' : 'index.html';
+            else { toko = null; tampilPilih(); }
+          });
+        } catch (err) {
+          tampilAlert('error', 'Koneksi Gagal', err.message || 'Gagal menyimpan lokasi.');
+        } finally {
+          sembunyikanLoadingTombol(btn);
+        }
+      }
+
+      function terapkanDaftar(list) {
+        daftarToko = list || [];
+        document.getElementById('cari-toko').placeholder = 'Cari nama toko...';
+        const id = param.get('id');
+        const t = id && daftarToko.find(x => x.id === id);
+        if (t && !toko) pilihToko(t);
+        else if (!toko) renderDaftar();
+      }
+
+      // Semua toko aktif (termasuk yang koordinatnya kosong/rusak -- justru itu yang perlu diperbaiki),
+      // koordinat diambil dari daftar rute kalau valid.
+      const gabung = (semua, berKoordinat) => {
+        const k = Object.fromEntries((berKoordinat || []).map(t => [t.id, t]));
+        return (semua || []).map(t => ({ id: t.id, nama: t.nama, lat: k[t.id] ? k[t.id].lat : undefined, lng: k[t.id] ? k[t.id].lng : undefined }));
+      };
+
+      document.addEventListener('DOMContentLoaded', () => {
+        const cacheSemua = ambilCacheAPI('getDaftarTokoAktif'), cacheKoordinat = ambilCacheAPI('getTokoUntukRute');
+        if (cacheSemua) terapkanDaftar(gabung(cacheSemua, cacheKoordinat));
+        Promise.all([jalankanFetchAPI('getDaftarTokoAktif'), jalankanFetchAPI('getTokoUntukRute')])
+          .then(([semua, koordinat]) => { const d = gabung(semua, koordinat); if (!toko) terapkanDaftar(d); else daftarToko = d; })
+          .catch(() => { if (!cacheSemua) document.getElementById('cari-toko').placeholder = 'Gagal memuat'; });
+      });
+    </script>
+  </body>
+</html>

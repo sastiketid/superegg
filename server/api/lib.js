@@ -51,17 +51,44 @@ async function upsertTokoDariSheet(db, t, aktif = true) {
     t.keterangan || '', t.fotoTerakhir || '', t.folderFoto || '', t.jadwal || '', num(t.totalKirim), aktif]);
 }
 
-// POST ke web app GAS. Google membalas 302 ke googleusercontent; fetch otomatis
-// mengikutinya sebagai GET (perilaku yang memang diharapkan GAS).
+const teksPolos = html => String(html).replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ')
+  .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 150);
+const jeda = ms => new Promise(r => setTimeout(r, ms));
+
+// Hasil eksekusi GAS diambil lewat URL echo. URL ini kadang 404 sesaat ("file tidak bisa dibuka"),
+// padahal skripnya sudah jalan -- coba ulang GET-nya, JANGAN eksekusi ulang skripnya.
+async function ambilEchoGas(url) {
+  let terakhir = '';
+  for (let i = 1; i <= 4; i++) {
+    const res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+    const teks = await res.text();
+    try { return JSON.parse(teks); } catch (e) { terakhir = `HTTP ${res.status}: ${teksPolos(teks)}`; }
+    await jeda(1500 * i);
+  }
+  throw new Error(`Balasan GAS hilang di echo: ${terakhir}`);
+}
+
+// POST ke web app GAS dengan redirect diikuti manual. Google membalas 302 ke URL echo (hasil);
+// sesekali 302 ke host GAS lain -- auto-follow fetch mengubahnya jadi GET sehingga doPost tidak
+// pernah jalan ("fungsi skrip tidak ditemukan: doGet"), jadi di sini di-POST ulang.
 async function panggilGas(action, data = {}) {
-  const res = await fetch(process.env.GAS_SYNC_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, data: { ...data, secret: process.env.SYNC_SECRET } }),
-    signal: AbortSignal.timeout(90000)
-  });
-  const teks = await res.text();
-  try { return JSON.parse(teks); } catch (e) { throw new Error(`GAS bukan JSON (HTTP ${res.status}): ${teks.slice(0, 150)}`); }
+  const body = JSON.stringify({ action, data: { ...data, secret: process.env.SYNC_SECRET } });
+  let url = process.env.GAS_SYNC_URL;
+  for (let lompat = 0; lompat < 3; lompat++) {
+    const res = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+      redirect: 'manual', signal: AbortSignal.timeout(90000)
+    });
+    const lokasi = res.headers.get('location');
+    if (res.status >= 300 && res.status < 400 && lokasi) {
+      if (lokasi.includes('/macros/echo')) return ambilEchoGas(lokasi);
+      url = lokasi;
+      continue;
+    }
+    const teks = await res.text();
+    try { return JSON.parse(teks); } catch (e) { throw new Error(`GAS bukan JSON (HTTP ${res.status}): ${teksPolos(teks)}`); }
+  }
+  throw new Error('GAS: terlalu banyak redirect');
 }
 
 async function tx(fn) {

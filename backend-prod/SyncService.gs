@@ -56,12 +56,15 @@ function tokoKeBarisMaster(t) {
 }
 
 // Tulis nilai ke baris ber-ID tertentu; kalau ID belum ada, tambah baris baru. Idempoten.
-function tulisBarisById(sheet, kolomId, id, kolomAwal, nilai) {
+// kolomTeks: kolom yang wajib teks polos (No HP) -- tanpa ini Sheets mengubah "0896..." jadi angka
+// 896... (nol di depan hilang). Formatnya dipasang SEBELUM nilai ditulis.
+function tulisBarisById(sheet, kolomId, id, kolomAwal, nilai, kolomTeks) {
   let row = cariBarisById(sheet, kolomId, id);
   if (row === -1) {
     row = sheet.getLastRow() + 1;
     sheet.getRange(row, kolomId).setValue(id);
   }
+  (kolomTeks || []).forEach(k => sheet.getRange(row, k).setNumberFormat('@'));
   sheet.getRange(row, kolomAwal, 1, nilai.length).setValues([nilai]);
   return row;
 }
@@ -88,12 +91,21 @@ function syncDariDbInternal(data) {
     const t = Object.assign({}, isi, hasil);
 
     if (data.jenis === 'toko') {
-      tulisBarisById(master, COL_MASTER_ID, t.id, COL_MASTER_NAMA, tokoKeBarisMaster(t));
+      tulisBarisById(master, COL_MASTER_ID, t.id, COL_MASTER_NAMA, tokoKeBarisMaster(t), [COL_MASTER_HP]);
+      // Toko aktif tidak boleh tersisa di arsip stop (mis. setelah DB di-restore / toko diaktifkan lagi).
+      const stop = ss.getSheetByName(SHEET_NAME_WARUNG_STOP);
+      const barisStop = cariBarisById(stop, COL_STOP_ID, t.id);
+      if (barisStop !== -1) stop.deleteRow(barisStop);
     } else {
       const stop = ss.getSheetByName(SHEET_NAME_WARUNG_STOP);
-      tulisBarisById(stop, COL_STOP_ID, t.id, COL_STOP_NAMA, [
+      const barisStop = tulisBarisById(stop, COL_STOP_ID, t.id, COL_STOP_NAMA, [
         t.nama, t.pemilik, t.hp, t.latlong, t.riwayatTerjual, t.riwayatSetoran, t.riwayatSisa, t.folderFoto, t.totalKirim
-      ]);
+      ], [COL_STOP_HP]);
+      // Samakan format angka dengan MASTER_WARUNG (sebagian sel WARUNG_STOP berformat tanggal -> 0 tampil 1899).
+      stop.getRange(barisStop, COL_STOP_RIWAYAT_TERJUAL).setNumberFormat('0" butir"');
+      stop.getRange(barisStop, COL_STOP_RIWAYAT_SETORAN).setNumberFormat('"Rp"#,##0');
+      stop.getRange(barisStop, COL_STOP_RIWAYAT_SISA).setNumberFormat('0" butir"');
+      stop.getRange(barisStop, COL_STOP_TOTAL_KIRIM).setNumberFormat('0"x Pengiriman"');
       if (row !== -1) master.deleteRow(row);
     }
     return Object.assign({ success: true }, hasil);
@@ -106,7 +118,7 @@ function syncDariDbInternal(data) {
       const folder = ambilOrBuatFolderBersama(DRIVE_FOLDER_ID_BUKTI_V2, "END_CUSTOMER");
       foto = uploadFotoBase64(folder, data.foto, data.namaFile).getUrl();
     }
-    tulisBarisById(sheet, COL_ENDCUST_ID, isi.id, COL_ENDCUST_NAMA, [isi.nama, isi.sales, isi.hp, isi.jumlah, foto]);
+    tulisBarisById(sheet, COL_ENDCUST_ID, isi.id, COL_ENDCUST_NAMA, [isi.nama, isi.sales, isi.hp, isi.jumlah, foto], [COL_ENDCUST_HP]);
     return { success: true, foto: foto };
   }
 
@@ -116,6 +128,20 @@ function syncDariDbInternal(data) {
       new Date(isi.tanggal), isi.nama, isi.tipe, isi.jumlah, isi.keterangan, isi.sales, isi.storeId
     ]);
     return { success: true };
+  }
+
+  // Hapus baris ber-ID tertentu (dipakai penyelarasan sheet setelah DB di-restore, mis. baris uji).
+  if (data.jenis === 'hapus') {
+    const peta = {
+      MASTER: [SHEET_NAME_MASTER, COL_MASTER_ID], STOP: [SHEET_NAME_WARUNG_STOP, COL_STOP_ID],
+      END_CUSTOMER: [SHEET_NAME_END_CUSTOMER, COL_ENDCUST_ID], HUTANG: [SHEET_NAME_HUTANG, COL_HUTANG_ID]
+    };
+    const target = peta[isi.sheet];
+    if (!target || !isi.id) return { success: false, message: "Target hapus tidak valid." };
+    const sheet = ss.getSheetByName(target[0]);
+    let dihapus = 0, row;
+    while ((row = cariBarisById(sheet, target[1], isi.id)) !== -1) { sheet.deleteRow(row); dihapus++; }
+    return { success: true, dihapus: dihapus };
   }
 
   return { success: false, message: "Jenis sinkron tidak dikenal: " + data.jenis };
@@ -159,12 +185,50 @@ function onEdit(e) {
   q.getRange(q.getLastRow() + 1, 1, antrian.length, 1).setValues(antrian);
 }
 
-// Kembalikan baris terbaru dari toko yang diedit manual, lalu buang antrian yang SUDAH dibaca
-// saja (geser sel dari atas) -- edit yang masuk selagi fungsi ini jalan tetap tersisa.
+// Trigger onEdit INSTALLABLE (dipasang sekali lewat pasangTriggerKirimEdit): kirim baris yang
+// diedit langsung ke API VPS supaya masuk DB dalam hitungan detik. Simple trigger onEdit di atas
+// tetap mencatat antrian _SINKRON sebagai cadangan (ditarik API tiap 20 detik) -- jadi kalau push
+// gagal, edit tetap sampai. Baris yang belum punya ID dilewati di sini (ID-nya diberi onEdit,
+// lalu ikut tarikan berkala).
+function kirimEditKeApi(e) {
+  const sheet = e.range.getSheet();
+  if (sheet.getName() !== SHEET_NAME_MASTER) return;
+  const r1 = Math.max(2, e.range.getRow());
+  const r2 = e.range.getLastRow();
+  if (r2 < r1) return;
+  const toko = sheet.getRange(r1, 1, r2 - r1 + 1, COL_MASTER_ID).getValues()
+    .map(barisMasterKeToko).filter(t => t.id && t.nama);
+  if (toko.length === 0) return;
+  const res = UrlFetchApp.fetch(API_PUSH_EDIT_URL, {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { 'x-sync-secret': SYNC_SECRET },
+    payload: JSON.stringify({ toko: toko })
+  });
+  if (res.getResponseCode() !== 200) console.warn('Push edit gagal ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 200));
+}
+
+// JALANKAN SEKALI dari editor Apps Script (pilih fungsi ini -> Run -> izinkan akses).
+// Aman diulang: trigger lama dengan nama yang sama dihapus dulu.
+function pasangTriggerKirimEdit() {
+  ScriptApp.getProjectTriggers()
+    .filter(t => t.getHandlerFunction() === 'kirimEditKeApi')
+    .forEach(t => ScriptApp.deleteTrigger(t));
+  ScriptApp.newTrigger('kirimEditKeApi').forSpreadsheet(SpreadsheetApp.getActive()).onEdit().create();
+  const res = UrlFetchApp.fetch(API_PUSH_EDIT_URL, {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { 'x-sync-secret': SYNC_SECRET }, payload: JSON.stringify({ toko: [] })
+  });
+  Logger.log('Trigger terpasang. Tes koneksi API: HTTP ' + res.getResponseCode() + ' ' + res.getContentText());
+}
+
+// Kembalikan baris terbaru dari toko yang diedit manual. Antrian TIDAK dihapus di sini: balasan
+// web app GAS kadang hilang di jalan (redirect echo Google 404), dan kalau antrian sudah terhapus,
+// editnya hilang selamanya. API memanggil ackEditSheet setelah datanya tersimpan di DB; kalau
+// ack tidak sampai, tarikan berikutnya mengembalikan data yang sama (upsert, aman diulang).
 function ambilEditSheetInternal() {
   const q = ambilSheetAntrian();
   const jumlah = q.getLastRow();
-  if (jumlah < 1) return { success: true, data: [] };
+  if (jumlah < 1) return { success: true, data: [], jumlahAntrian: 0 };
   const ids = [...new Set(q.getRange(1, 1, jumlah, 1).getValues().map(r => String(r[0]).trim()).filter(Boolean))];
 
   const master = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME_MASTER);
@@ -174,8 +238,16 @@ function ambilEditSheetInternal() {
     if (row === -1) return; // baris sudah dihapus/dipindah manual -- diabaikan
     data.push(barisMasterKeToko(master.getRange(row, 1, 1, COL_MASTER_ID).getValues()[0]));
   });
-  q.getRange(1, 1, jumlah, 1).deleteCells(SpreadsheetApp.Dimension.ROWS);
-  return { success: true, data: data };
+  return { success: true, data: data, jumlahAntrian: jumlah };
+}
+
+// Buang N baris teratas antrian (yang sudah dibaca & disimpan API). Edit yang masuk sesudah
+// tarikan ada di bawahnya, jadi tidak ikut terbuang.
+function ackEditSheetInternal(data) {
+  const q = ambilSheetAntrian();
+  const n = Math.min(Number(data.jumlah) || 0, q.getLastRow());
+  if (n > 0) q.getRange(1, 1, n, 1).deleteCells(SpreadsheetApp.Dimension.ROWS);
+  return { success: true, dihapus: n };
 }
 
 // ---------- Ekspor penuh (impor awal ke DB) ----------

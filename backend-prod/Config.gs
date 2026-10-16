@@ -59,5 +59,14 @@ const DRIVE_FOLDER_ID_BUKTI_V2 = "1mTW30DulUaMJOXgUzS-RUFJ-vIut71du";
 
 const HARGA_PER_BUTIR = 3500;
 
+// Sejak 14 Okt 2026 database VPS = sumber utama, GAS cuma cermin spreadsheet (SyncService.gs).
+// false = aksi aplikasi lama (getDaftarTokoAktif, submitLaporanSatuan, dst.) ditolak, supaya tidak
+// ada yang menulis langsung ke sheet dan bikin sheet/DB tidak sinkron. Aksi sinkron tetap jalan.
+// ROLLBACK ke GAS: ubah ke true -> clasp push -> redeploy deployment produksi lama -> hapus API_URL di Vercel.
+const AKSI_LANGSUNG_AKTIF = false;
+
+// Endpoint API VPS untuk push edit manual MASTER_WARUNG (trigger kirimEditKeApi, SyncService.gs).
+const API_PUSH_EDIT_URL = "https://supermuncul-api.imaga.site/sheet-edit";
+
 // Nama hari Indonesia, index sesuai Date.getDay() (0=Minggu ... 6=Sabtu)
 const HARI_INDONESIA = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];

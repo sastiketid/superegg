@@ -46,6 +46,8 @@ button:disabled { background-color: #E5E7EB; cursor: not-allowed; transform: non
 .btn-secondary { background-color: var(--secondary); color: white; }
 .btn-danger { background-color: var(--danger); color: white; } .btn-danger:hover { background-color: var(--danger-hover); }
 .btn-success { background-color: var(--success); color: white; } .btn-success:hover { background-color: var(--success-hover); }
+.btn-install { background-color: #FFF; color: var(--primary); border: 2px dashed var(--primary); }
+.btn-install:hover { background-color: #EEF2FF; }
 button svg { flex-shrink: 0; }
 
 /* Tombol utama dibekukan di bawah layar, tidak ikut scroll.
@@ -86,11 +88,18 @@ input:focus, textarea:focus { outline: none; border-color: var(--primary); backg
 .custom-select-list li:hover { background-color: var(--primary); color: white; }
 .custom-select-list li.no-result { color: var(--danger); cursor: not-allowed; background: white; }
 
-/* Centang "catat kekurangan setoran sebagai hutang" di form laporan */
-.cek-hutang { display: flex; align-items: center; gap: 10px; margin: -6px 0 16px; padding: 10px 12px; border-radius: 10px; background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; font-size: 13.5px; font-weight: 600; cursor: pointer; }
-.cek-hutang input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: var(--danger); }
+/* Bagian hutang & info titipan di form laporan */
+.hutang-box { border: 1px solid #FCA5A5; background: #FFF7F7; border-radius: 12px; padding: 12px 12px 4px; margin-bottom: 16px; }
+.hutang-box-judul { font-size: 12px; font-weight: 800; color: #991B1B; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 8px; }
+.hutang-box .form-group { margin-bottom: 10px; }
+.hutang-box small { display: block; margin-top: 4px; font-size: 12px; color: var(--text-muted); }
+.btn-isi-kurang { width: 100%; margin: -4px 0 10px; padding: 9px 12px; font-size: 13px; background: #FEE2E2; color: #991B1B; border: 1.5px dashed #FCA5A5; }
+.info-titipan { margin: -8px 0 16px; padding: 9px 12px; border-radius: 10px; font-size: 13px; font-weight: 600; background: #F3F4F6; color: var(--text-main); }
+.info-titipan.tambah { background: #ECFDF5; color: #065F46; }
+.info-titipan.kurang { background: #FFFBEB; color: #92400E; }
 
 .pin-nomor { background: none; border: none; }
+.btn-lokasi-saya { width: 38px; height: 38px; margin: 0; padding: 0; border-radius: 10px; background: #FFF; color: #2563EB; border: 2px solid rgba(0,0,0,0.2); box-shadow: 0 1px 4px rgba(0,0,0,0.2); }
 .pin-nomor svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.45)); }
 
 #canvas-foto { width: 100%; border-radius: 12px; margin-bottom: 10px; background-color: #eee; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -138,3 +147,41 @@ input:focus, textarea:focus { outline: none; border-color: var(--primary); backg
 .toast-sukses .toast-icon { flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--success); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; margin-top: 1px; }
 .toast-sukses strong { display: block; font-size: 13.5px; margin-bottom: 2px; }
 .toast-sukses p { margin: 0; font-size: 12.5px; color: #D1D5DB; line-height: 1.4; }
+
+/* Kartu rute, sektor & rekap -- dipakai Manajemen Rute dan arsip rekap di Riwayat */
+.stop-badge { background: var(--primary); color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; flex-shrink: 0; }
+.stop-nama { flex: 1; font-weight: 600; }
+.route-stop-card { display: flex; align-items: center; gap: 12px; border: 1.5px solid #E5E7EB; border-radius: 12px; padding: 16px; margin-bottom: 10px; background: #FFF; cursor: pointer; }
+.route-stop-card.status-dilapor { background: #D1FAE5; border-color: #6EE7B7; }
+.route-stop-card.status-tutup { background: #FEE2E2; border-color: #FCA5A5; }
+.route-stop-card.status-stop { background: #F3F4F6; border-color: #D1D5DB; }
+.route-stop-card.status-stop .stop-nama { color: var(--text-muted); }
+.stop-stop-label { flex-shrink: 0; font-size: 12px; font-weight: 700; color: white; background: #6B7280; padding: 4px 10px; border-radius: 20px; }
+.route-stop-card .stop-nama { font-size: 16px; font-weight: 700; }
+.route-stop-card .stop-nav-btn { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #F3F4F6; color: var(--secondary); }
+.route-stop-card .stop-nav-btn:hover { background: #E5E7EB; }
+.stop-tutup-label { flex-shrink: 0; font-size: 12px; font-weight: 700; color: white; background: var(--danger); padding: 4px 10px; border-radius: 20px; }
+.sektor-box { margin-bottom: 22px; border-radius: 14px; overflow: hidden; border: 1.5px solid #E5E7EB; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+.sektor-heading { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; }
+.sektor-heading .sektor-nama { font-weight: 800; font-size: 17px; color: white; }
+.sektor-heading .sektor-count { flex-shrink: 0; font-size: 12px; font-weight: 700; color: white; background: rgba(255,255,255,0.28); padding: 4px 11px; border-radius: 20px; }
+.sektor-body { padding: 12px; background: #FAFAFA; }
+.btn-buka-jalur { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 4px 0 0; padding: 16px; border-radius: 10px; background: var(--primary); color: white; font-weight: 700; font-size: 16px; text-decoration: none; box-sizing: border-box; }
+.btn-buka-jalur.selesai { background: var(--secondary); }
+.rekap-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.rekap-tile { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 14px; text-align: center; }
+.rekap-tile .rekap-label { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+.rekap-tile .rekap-value { font-size: 18px; font-weight: 800; color: var(--text-main); margin-top: 4px; }
+.rekap-judul { font-size: 12px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin: 4px 0 8px 2px; }
+.rekap-total { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--primary); color: #FFF; border-radius: 12px; padding: 14px 16px; margin: -6px 0 10px; }
+.rekap-total span { font-size: 12px; font-weight: 700; line-height: 1.3; }
+.rekap-total b { font-size: 20px; font-weight: 800; white-space: nowrap; }
+.rekap-cek { font-size: 12.5px; line-height: 1.5; color: var(--text-muted); background: #F9FAFB; border: 1px dashed #D1D5DB; border-radius: 10px; padding: 10px 12px; margin: 0 0 18px; }
+.rekap-cek b.ok { color: var(--success); } .rekap-cek b.beda { color: var(--danger); }
+.rekap-list { background: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; font-size: 13px; }
+.rekap-list strong { display: block; margin-bottom: 4px; }
+.rekap-list p { margin: 3px 0; }
+.rekap-list.merah { background: #FEF2F2; border-color: #FCA5A5; }
+.rekap-kunjungan { margin: 0 0 14px; text-align: center; font-size: 12.5px; color: var(--text-muted); font-weight: 600; }
+.stop-belum-label { flex-shrink: 0; font-size: 12px; font-weight: 700; color: var(--text-muted); background: #E5E7EB; padding: 4px 10px; border-radius: 20px; }
+.stop-detail { display: block; font-size: 12px; font-weight: 500; color: var(--text-muted); margin-top: 2px; }

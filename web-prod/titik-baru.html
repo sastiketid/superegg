@@ -9,6 +9,20 @@
     <link rel="apple-touch-icon" href="icons/icon-192.png">
     <meta name="theme-color" content="#4F46E5">
     <link rel="stylesheet" href="shared/style.css">
+    <style>
+      .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 16px; }
+      .mode-tabs button { margin: 0; padding: 10px 6px; font-size: 13.5px; border-radius: 10px; background: #F3F4F6; color: var(--text-muted); border: 1.5px solid #E5E7EB; }
+      .mode-tabs button.is-on { background: var(--text-main); border-color: var(--text-main); color: #FFF; }
+      .stop-pilih-list { max-height: 55vh; overflow-y: auto; margin-top: 10px; border: 1px solid #E5E7EB; border-radius: 12px; }
+      .stop-pilih-item { padding: 12px 14px; border-bottom: 1px solid #E5E7EB; cursor: pointer; }
+      .stop-pilih-item:last-child { border-bottom: none; }
+      .stop-pilih-item:active { background: #EEF2FF; }
+      .stop-pilih-item b { display: block; font-size: 14.5px; }
+      .stop-pilih-item small { color: var(--text-muted); font-size: 12.5px; }
+      .stop-terpilih { display: flex; align-items: center; gap: 10px; background: #ECFDF5; border: 1px solid #6EE7B7; border-radius: 12px; padding: 10px 12px; margin-bottom: 16px; font-size: 13.5px; }
+      .stop-terpilih span { flex: 1; }
+      .stop-terpilih button { width: auto; margin: 0; padding: 6px 10px; font-size: 12px; background: #FFF; color: var(--text-main); border: 1.5px solid #D1D5DB; }
+    </style>
   </head>
   <body>
 
@@ -27,13 +41,24 @@
         <button class="btn-back-icon" onclick="location.href = dibukaDariRute() ? 'manajemen-rute.html' : 'index.html'" aria-label="Kembali">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
         </button>
-        <h2>Buka Titik Baru</h2>
+        <h2 id="judul-halaman">Buka Titik Baru</h2>
       </div>
 
       <div class="scroll-area has-sticky-bottom">
 
       <div id="form-section">
+        <div class="mode-tabs" role="tablist" id="mode-tabs">
+          <button type="button" class="is-on" id="mode-baru" onclick="setMode('baru')">Toko Baru</button>
+          <button type="button" id="mode-aktif" onclick="setMode('aktif')">Aktifkan Toko Stop</button>
+        </div>
+
+        <div id="pilih-stop-section" class="hidden">
+          <input type="text" id="cari-stop" placeholder="Memuat toko stop..." oninput="renderTokoStop()" autocomplete="off">
+          <div id="list-stop" class="stop-pilih-list"></div>
+        </div>
+
         <div id="form-lanjutan">
+          <div class="stop-terpilih hidden" id="stop-terpilih"><span>Mengaktifkan kembali <b id="stop-terpilih-nama"></b>. Data lama (riwayat & folder foto) tetap tersimpan.</span><button type="button" onclick="gantiTokoStop()">Ganti</button></div>
           <div class="form-group"><label>Nama Warung:</label><input type="text" id="tb-nama" placeholder="Contoh: Ajwa Soto"></div>
           <div class="form-group"><label>Pemilik:</label><input type="text" id="tb-pemilik" placeholder="Nama Pemilik"></div>
           <div class="form-group"><label>No HP:</label><input type="text" inputmode="numeric" id="tb-hp" placeholder="08..."></div>
@@ -62,7 +87,7 @@
 
     <div class="sticky-bottom">
       <div class="sticky-bottom-inner">
-        <button class="btn-danger" id="btn-ambil-foto" onclick="triggerKamera()">Ambil Foto Titik Baru &amp; Review</button>
+        <button class="btn-danger" id="btn-ambil-foto" onclick="triggerKamera()">Ambil Foto &amp; Review</button>
         <div class="dual-btn hidden" id="btn-konfirmasi-group">
           <button class="btn-secondary" onclick="editFormulir()">Batal &amp; Edit</button>
           <button class="btn-success" onclick="eksekusiKirim()">Kirim Final</button>
@@ -78,7 +103,64 @@
       let geoLong = 0;
       let dropdownData = {};
 
+      // Mode 'aktif' = mengaktifkan lagi toko yang pernah di-Stop: form sama dengan titik baru (data lama
+      // terisi otomatis, bisa diubah), lokasi ikut diperbarui dari GPS saat foto diambil.
+      let mode = 'baru';
+      let daftarTokoStop = null;
+      let idTokoStop = '';
+
+      function setMode(m) {
+        mode = m;
+        document.getElementById('mode-baru').classList.toggle('is-on', m === 'baru');
+        document.getElementById('mode-aktif').classList.toggle('is-on', m === 'aktif');
+        document.getElementById('judul-halaman').textContent = m === 'aktif' ? 'Aktifkan Toko Stop' : 'Buka Titik Baru';
+        ['tb-nama', 'tb-pemilik', 'tb-hp'].forEach(id => { document.getElementById(id).value = ''; });
+        idTokoStop = '';
+        document.getElementById('stop-terpilih').classList.add('hidden');
+        document.getElementById('pilih-stop-section').classList.toggle('hidden', m !== 'aktif');
+        document.getElementById('form-lanjutan').classList.toggle('hidden', m === 'aktif');
+        document.querySelector('.sticky-bottom').classList.toggle('hidden', m === 'aktif');
+        if (m === 'aktif' && !daftarTokoStop) {
+          jalankanFetchAPI('getTokoStop').then(res => {
+            daftarTokoStop = Array.isArray(res) ? res : [];
+            document.getElementById('cari-stop').placeholder = 'Cari toko stop...';
+            renderTokoStop();
+          }).catch(() => { document.getElementById('cari-stop').placeholder = 'Gagal memuat'; });
+        } else if (m === 'aktif') renderTokoStop();
+      }
+
+      function renderTokoStop() {
+        const q = document.getElementById('cari-stop').value.trim().toLowerCase();
+        const list = document.getElementById('list-stop');
+        const tampil = (daftarTokoStop || []).filter(t => t.nama.toLowerCase().includes(q));
+        list.innerHTML = tampil.length ? '' : '<div class="stop-pilih-item"><small>Tidak ada toko stop ditemukan.</small></div>';
+        tampil.forEach(t => {
+          const item = document.createElement('div');
+          item.className = 'stop-pilih-item';
+          item.innerHTML = '<b></b><small></small>';
+          item.querySelector('b').textContent = t.nama;
+          item.querySelector('small').textContent = [t.pemilik, t.hp, `${t.totalKirim}x pengiriman`].filter(Boolean).join(' · ');
+          item.onclick = () => pilihTokoStop(t);
+          list.appendChild(item);
+        });
+      }
+
+      function pilihTokoStop(t) {
+        idTokoStop = t.id;
+        document.getElementById('tb-nama').value = t.nama;
+        document.getElementById('tb-pemilik').value = t.pemilik;
+        document.getElementById('tb-hp').value = t.hp;
+        document.getElementById('stop-terpilih-nama').textContent = t.nama;
+        document.getElementById('stop-terpilih').classList.remove('hidden');
+        document.getElementById('pilih-stop-section').classList.add('hidden');
+        document.getElementById('form-lanjutan').classList.remove('hidden');
+        document.querySelector('.sticky-bottom').classList.remove('hidden');
+      }
+
+      function gantiTokoStop() { setMode('aktif'); }
+
       function triggerKamera() {
+        if (mode === 'aktif' && !idTokoStop) return tampilAlert('warning', 'Pilih Toko', 'Pilih toko stop yang mau diaktifkan dulu.');
         const nama = document.getElementById('tb-nama').value;
         const pemilik = document.getElementById('tb-pemilik').value;
         const hp = document.getElementById('tb-hp').value;
@@ -139,7 +221,7 @@
         const jumlahAwal = document.getElementById('tb-jumlah').value;
 
         ctx.fillText(`WAKTU : ${currentTimestamp}`, 15, startY);
-        ctx.fillText(`TITIK BARU : ${nama}`, 15, startY + lineGap);
+        ctx.fillText(`${mode === 'aktif' ? 'AKTIF LAGI' : 'TITIK BARU'} : ${nama}`, 15, startY + lineGap);
         ctx.fillText(`DROP AWAL  : ${jumlahAwal} butir`, 15, startY + (lineGap * 2));
         ctx.fillText(`LATITUDE   : ${geoLat}`, 15, startY + (lineGap * 3));
         ctx.fillText(`LONGITUDE  : ${geoLong}`, 15, startY + (lineGap * 4));
@@ -153,7 +235,7 @@
         let keterangan = document.getElementById('tb-keterangan').value || "-";
 
         document.getElementById('summary-box-content').innerHTML = `
-          <p><strong>Waktu:</strong> ${currentTimestamp}</p><p><strong>Nama Warung:</strong> ${nama}</p>
+          <p><strong>Waktu:</strong> ${currentTimestamp}</p><p><strong>${mode === 'aktif' ? 'Aktifkan Kembali' : 'Nama Warung'}:</strong> ${nama}</p>
           <p><strong>Pemilik:</strong> ${pemilik}</p><p><strong>No HP:</strong> ${hp}</p>
           <p><strong>Drop Awal:</strong> ${jumlahAwal} butir</p><p><strong>Lat/Long:</strong> ${geoLat.toFixed(5)}, ${geoLong.toFixed(5)}</p>
           <p><strong>Keterangan:</strong> ${keterangan}</p>
@@ -186,6 +268,7 @@
             const fotoBase64 = kompresCanvasKeDataUrl(document.getElementById('canvas-foto'));
 
             let payload = {
+              storeId: idTokoStop,
               namaWarung: document.getElementById('tb-nama').value,
               pemilik: document.getElementById('tb-pemilik').value,
               hp: document.getElementById('tb-hp').value,
@@ -197,14 +280,16 @@
               fotoBase64: fotoBase64
             };
 
-            jalankanFetchAPI('submitTitikBaru', payload).then(res => {
+            jalankanFetchAPI(mode === 'aktif' ? 'aktifkanToko' : 'submitTitikBaru', payload).then(res => {
               sembunyikanLoadingTombol(btnKirim);
               if (res.success) {
                 if (dibukaDariRute()) {
                   // Dibuka dari dashboard rute: toko baru langsung masuk rute sebagai sudah dilapor,
                   // drop awalnya dihitung sebagai telur keluar di rekap.
                   const rute = ambilRuteAktif();
-                  rute.stops.push({ id: res.id, nama: payload.namaWarung, lat: geoLat, lng: geoLong, status: 'dilapor', setoran: 0, restock: payload.jumlahAwal, sisaTelur: 0, titikBaru: true });
+                  // Titik baru & toko aktif kembali sama-sama mulai dari titipan 0 (rekap: tambah titipan).
+                  rute.stops.push({ id: res.id, nama: payload.namaWarung, lat: geoLat, lng: geoLong, status: 'dilapor', setoran: 0, restock: payload.jumlahAwal, sisaTelur: 0,
+                    titikBaru: mode === 'baru', aktifKembali: mode === 'aktif', stokLama: 0 });
                   simpanRuteAktifKeStorage(rute);
                   return tampilAlert('success', 'Berhasil', res.message, () => location.href = 'manajemen-rute.html');
                 }

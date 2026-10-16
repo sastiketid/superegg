@@ -9,7 +9,7 @@ HP sales ─► Vercel (frontend + /api/proxy) ─x-api-key─► Cloudflare Tun
 
 - **Sumber data utama: Postgres.** Spreadsheet = cerminan yang terus terupdate.
 - **DB → Sheet:** tiap kiriman masuk tabel `outbox` (snapshot baris penuh + foto base64), dikirim berurutan ke GAS `syncDariDb`, yang menulis baris & upload foto ke Drive seperti dulu. Gagal → dicoba ulang (jeda naik sampai 15 menit, maks 20x).
-- **Sheet → DB:** edit manual di `MASTER_WARUNG` ditangkap `onEdit` ke sheet tersembunyi `_SINKRON`, ditarik API tiap 30 detik (dan selalu sebelum mengirim outbox, supaya edit manual tidak tertimpa). **Hapus/pindah baris manual tidak tersinkron** — stop toko lewat aplikasi. Edit manual sheet lain (END_CUSTOMER, HUTANG, WARUNG_STOP) juga tidak ikut.
+- **Sheet → DB:** edit manual di `MASTER_WARUNG` ditangkap `onEdit` ke sheet tersembunyi `_SINKRON`, ditarik API tiap 20 detik dan selalu sebelum mengirim outbox. Antrian baru dihapus setelah API mengonfirmasi (`ackEditSheet`), jadi balasan GAS yang hilang di jalan tidak menghilangkan edit. Kalau tarikan gagal, outbox ditahan dulu supaya snapshot DB tidak menimpa edit manual yang lebih baru. `/health` menampilkan `tarikEditTerakhir`. **Hapus/pindah baris manual tidak tersinkron** — stop toko lewat aplikasi. Edit manual sheet lain (END_CUSTOMER, HUTANG, WARUNG_STOP) juga tidak ikut.
 - Kontrak API = `Gateway.gs` lama (`POST {action, data}`), jadi frontend tidak berubah.
 
 ## Batas resource (VPS dipakai bareng produksi naraya)
@@ -36,7 +36,7 @@ ssh naraya-vps 'curl -s 127.0.0.1:8082/health'
 ```
 
 Backend GAS: `cd backend-prod && clasp push -f && clasp deploy -i <ID deployment sinkron, ada di GAS_SYNC_URL .env VPS> -d "..."`
-(deployment sinkron; deployment produksi lama `AKfycbw8sb6...` dibiarkan untuk rollback).
+(deployment sinkron). Deployment lain ikut diarahkan ke versi terkunci yang sama — lihat Rollback di bawah.
 
 ## Cutover — SUDAH DILAKUKAN 14 Okt 2026 ±22.15 WIB
 
@@ -49,11 +49,16 @@ Langkah di bawah dicatat untuk referensi (mis. memindahkan ke server lain):
 3. Segera impor ulang data terbaru dari sheet: `docker compose exec -T api node import.js` (menolak jalan kalau sudah ada kiriman asli masuk DB — tanda ada yang lolos di jeda ini).
 4. `SYNC_AKTIF=1` di `.env`, lalu `docker compose up -d api`. Cek `/health` → `"sinkron": true`.
 
-**Rollback:** hapus env `API_URL` di Vercel, redeploy → kembali ke GAS lama. Kiriman yang sempat masuk DB sudah tercermin di sheet selama sinkron aktif.
+**Rollback ke GAS** (sejak 14 Okt 2026 aksi lama GAS dikunci, `AKSI_LANGSUNG_AKTIF=false` di `Config.gs`):
+1. `AKSI_LANGSUNG_AKTIF = true` → `clasp push -f` → `clasp version "rollback"` → `clasp deploy -V <versi> -i <ID deployment produksi lama>` (ID ada di `GAS_API_URL` Vercel; `clasp deployments` menampilkannya dengan deskripsi "Produksi lama").
+2. Hapus env `API_URL` di Vercel, `vercel --prod --cwd web-prod`.
+Kiriman yang sempat masuk DB sudah tercermin di sheet selama sinkron aktif. Fitur hutang di form laporan hanya jalan dengan API VPS.
 
 ## Operasional
 
 - Status antrian: `curl -s 127.0.0.1:8082/health` → `outboxAntre`, `outboxGagal`.
 - Ulangi event gagal: `docker compose exec db psql -U supermuncul -c "update outbox set gagal=false, percobaan=0, coba_lagi=now() where gagal"`.
-- Backup manual: `docker compose exec -T db pg_dump -U supermuncul supermuncul | gzip > ~/backups/supermuncul-$(date +%F).sql.gz`.
+- **Backup otomatis**: `backup.sh` via crontab user `ubuntu` tiap 03.00 WIB (`0 4 * * *`, server ber-zona Asia/Shanghai) → `~/backups/supermuncul/supermuncul-YYYYMMDD-HHMM.sql.gz`, disimpan 14 hari, log di `backup.log`. Backup manual: `~/supermuncul/backup.sh`. Restore: `gunzip -c FILE | docker compose exec -T db psql -U supermuncul supermuncul` (dump memakai `--clean`, jadi menimpa isi DB).
+- Backup ada di VPS yang sama; cadangan di luar VPS = spreadsheet (toko, end customer, hutang). Tabel `laporan` (log per kunjungan) hanya ada di DB/backup.
+- Semua deployment GAS (selain HEAD) diarahkan ke versi terkunci: aksi lama ditolak, cuma aksi sinkron (wajib secret) yang jalan.
 - `import.js` hanya untuk sebelum cutover; setelahnya DB adalah sumber utama.

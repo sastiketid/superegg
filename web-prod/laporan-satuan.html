@@ -81,8 +81,6 @@
 
           <div class="form-group"><label>Sisa Telur (Butir):</label><input type="number" id="sisa-telur" placeholder="0" oninput="kalkulasiSetoranOtomatis()"></div>
           <div class="form-group"><label>Total Setoran (Rp):</label><input type="text" inputmode="numeric" id="total-setoran" placeholder="0" oninput="formatRupiahInput(this); perbaruiKekuranganSetoran('', tokoDetailAktif)"></div>
-          <label class="cek-hutang hidden" id="hutang-kurang-box"><input type="checkbox" id="hutang-kurang"><span id="hutang-kurang-teks"></span></label>
-          <div class="form-group hidden" id="bayar-hutang-group"><label>Terima Bayar Hutang (Rp, opsional):</label><input type="text" inputmode="numeric" id="bayar-hutang" placeholder="0" oninput="formatRupiahInput(this)"></div>
 
           <div class="form-group">
             <label>Status:</label>
@@ -92,12 +90,21 @@
               <ul id="status-list" class="custom-select-list"></ul>
             </div>
           </div>
-          <div class="form-group hidden" id="input-restock-container"><label>Jumlah Restock (Butir):</label><input type="number" id="jumlah-restock" placeholder="0"></div>
+          <div class="form-group hidden" id="input-restock-container"><label>Jumlah Restock (Butir):</label><input type="number" id="jumlah-restock" placeholder="0" oninput="perbaruiInfoTitipan('', tokoDetailAktif)"></div>
+          <p class="info-titipan hidden" id="info-titipan"></p>
 
           <div class="form-group">
             <label>Keterangan:</label>
             <textarea id="keterangan" rows="2" placeholder="Catatan tambahan..." oninput="onKeteranganInput()"></textarea>
             <p class="keterangan-lama-preview hidden" id="keterangan-lama-preview"></p>
+          </div>
+
+          <div class="hutang-box">
+            <div class="hutang-box-judul">Hutang toko (di luar tempo telur)</div>
+            <div class="form-group hidden" id="bayar-hutang-group"><label>Terima Bayar Hutang (Rp):</label><input type="text" inputmode="numeric" id="bayar-hutang" placeholder="0" oninput="formatRupiahInput(this)"><small>Sisa hutang toko: <b id="bayar-hutang-sisa">Rp 0</b></small></div>
+            <div class="form-group"><label>Tambah Hutang Baru (Rp):</label><input type="text" inputmode="numeric" id="hutang-baru" placeholder="0" oninput="formatRupiahInput(this)"></div>
+            <button type="button" class="btn-isi-kurang hidden" id="hutang-kurang-btn" onclick="isiKekuranganKeHutang('', tokoDetailAktif)"></button>
+            <div class="form-group"><input type="text" id="hutang-ket" placeholder="Keterangan hutang (mis. pinjam uang, kurang bayar)" autocomplete="off"></div>
           </div>
         </div>
 
@@ -145,6 +152,7 @@
         initCustomDropdown('status', (val) => {
           if (val === 'Restock') document.getElementById('input-restock-container').classList.remove('hidden');
           else { document.getElementById('input-restock-container').classList.add('hidden'); document.getElementById('jumlah-restock').value = ''; }
+          perbaruiInfoTitipan('', tokoDetailAktif);
         });
 
         muatDaftarToko();
@@ -153,12 +161,19 @@
       });
 
       function muatDaftarToko(diam = false) {
+        // Tampilkan daftar terakhir yang tersimpan di HP dulu (instan), lalu ganti dengan data server.
+        const cache = daftarTokoAktif.length ? null : ambilCacheAPI('getDaftarTokoAktif');
+        if (cache) {
+          daftarTokoAktif = cache;
+          document.getElementById('cari-toko-input').placeholder = "Cari nama toko...";
+          filterDaftarToko();
+        }
         jalankanFetchAPI('getDaftarTokoAktif').then(res => {
           document.getElementById('cari-toko-input').placeholder = "Cari nama toko...";
           daftarTokoAktif = res || [];
           filterDaftarToko(); // pertahankan kata kunci pencarian yang sedang diketik
         }).catch(err => {
-          if (diam) return;
+          if (diam || daftarTokoAktif.length) return; // daftar dari cache tetap bisa dipakai
           document.getElementById('cari-toko-input').placeholder = "Gagal memuat";
           tampilAlert('error', 'Koneksi Gagal', 'Gagal mengambil daftar toko dari server.');
         });
@@ -337,7 +352,7 @@
           <p><strong>Waktu:</strong> ${currentTimestamp}</p><p><strong>Toko:</strong> ${tokoDetailAktif.nama}</p>
           <p><strong>Sisa Telur:</strong> ${sisa} butir</p><p><strong>Setoran:</strong> ${setoran}</p>
           <p><strong>Status:</strong> ${statusTeks}</p><p><strong>Keterangan:</strong> ${keteranganTeks}</p>
-          ${ringkasanHutangLaporan(ambilHutangLaporan('', tokoDetailAktif))}
+          ${ringkasanHutangLaporan(ambilHutangLaporan('', tokoDetailAktif), perubahanTitipan('', tokoDetailAktif), status === 'Stop')}
         `;
         cetakWatermark();
 

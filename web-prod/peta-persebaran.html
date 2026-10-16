@@ -92,6 +92,7 @@
       document.addEventListener('DOMContentLoaded', () => {
         map = L.map('map-peta').setView([-7.5666, 110.8166], 12);
         L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { attribution: '© Google Maps', maxZoom: 20 }).addTo(map);
+        pantauLokasiSaya(map);
         setTimeout(() => map.invalidateSize(), 100);
 
         muatDataPeta();

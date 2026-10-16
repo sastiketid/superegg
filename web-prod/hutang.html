@@ -23,6 +23,11 @@
       .debitur-saldo { flex-shrink: 0; font-weight: 800; font-size: 15px; color: var(--danger); }
       .debitur-saldo.lunas { color: var(--success); font-size: 12.5px; }
       .list-kosong { text-align: center; color: var(--text-muted); padding: 30px 0; font-size: 13.5px; }
+      .saran-toko { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .saran-toko span { width: 100%; font-size: 12px; color: var(--text-muted); }
+      .saran-toko button { width: auto; margin: 0; padding: 6px 10px; font-size: 12.5px; background: #EEF2FF; color: var(--primary); border: 1.5px solid #C7D2FE; }
+      .cek-bukan-toko { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+      .cek-bukan-toko input { width: 18px; height: 18px; margin: 0; padding: 0; }
       .toggle-lunas { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-muted); margin: 0 0 10px 2px; font-weight: 600; }
       .toggle-lunas input { width: auto; margin: 0; }
       .mutasi { text-align: left; max-height: 40vh; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 10px; margin-bottom: 12px; }
@@ -96,8 +101,10 @@
         <h3 class="modal-title" id="form-judul" style="text-align:center;">Catat Hutang</h3>
         <div class="form-group">
           <label>Nama Toko / Pembeli:</label>
-          <input type="text" id="f-nama" list="daftar-nama" placeholder="Ketik atau pilih nama" autocomplete="off">
+          <input type="text" id="f-nama" list="daftar-nama" placeholder="Ketik atau pilih nama toko" autocomplete="off" oninput="tampilSaranToko()">
           <datalist id="daftar-nama"></datalist>
+          <div class="saran-toko hidden" id="f-saran"></div>
+          <label class="cek-bukan-toko"><input type="checkbox" id="f-bukan-toko" onchange="tampilSaranToko()"> Bukan toko (pembeli perorangan / lainnya)</label>
         </div>
         <div class="form-group"><label>Jumlah (Rp):</label><input type="text" inputmode="numeric" id="f-jumlah" placeholder="0" oninput="formatRupiahInput(this)"></div>
         <div class="form-group"><label>Keterangan (opsional):</label><input type="text" id="f-ket" placeholder="mis. setoran kurang, bayar besok"></div>
@@ -121,6 +128,10 @@
       const tglPendek = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }); };
 
       document.addEventListener('DOMContentLoaded', () => {
+        // Data terakhir di HP tampil instan, lalu diperbarui dari server.
+        tokoAktif = ambilCacheAPI('getDaftarTokoAktif') || [];
+        const cacheHutang = ambilCacheAPI('getHutang');
+        if (cacheHutang) { entri = cacheHutang; render(); isiSaranNama(); }
         muat();
         jalankanFetchAPI('getDaftarTokoAktif').then(res => { tokoAktif = res || []; isiSaranNama(); }).catch(() => {});
         pantauPerubahan(muat);
@@ -197,6 +208,9 @@
         tipeForm = tipe;
         document.getElementById('form-judul').textContent = tipe === 'Bayar' ? 'Terima Pembayaran' : 'Catat Hutang';
         document.getElementById('f-nama').value = nama;
+        // Nama lama yang bukan toko (mis. pembeli perorangan) otomatis dicentang "Bukan toko".
+        document.getElementById('f-bukan-toko').checked = !!nama && !tokoDariNama(nama);
+        tampilSaranToko();
         document.getElementById('f-ket').value = '';
         const jumlah = document.getElementById('f-jumlah');
         jumlah.value = '';
@@ -211,12 +225,37 @@
 
       function tutupModal(id) { document.getElementById(id).classList.remove('show'); }
 
+      const tokoDariNama = nama => tokoAktif.find(t => kunci(t.nama) === kunci(nama));
+
+      // Nama harus persis nama toko supaya hutang terhubung ke tokonya (muncul di form laporan).
+      // Kalau ketikan belum cocok, tawarkan toko yang mirip (semua kata yang diketik ada di namanya).
+      function tampilSaranToko() {
+        const box = document.getElementById('f-saran');
+        const nama = document.getElementById('f-nama').value.trim();
+        const kata = kunci(nama).split(/\s+/).filter(Boolean);
+        if (!kata.length || tokoDariNama(nama) || document.getElementById('f-bukan-toko').checked) { box.classList.add('hidden'); return; }
+        const cocok = tokoAktif.filter(t => kata.every(k => kunci(t.nama).includes(k))).slice(0, 4);
+        box.innerHTML = cocok.length ? '<span>Maksud Anda:</span>' : '<span>Tidak ada toko dengan nama itu. Pilih dari daftar, atau centang "Bukan toko".</span>';
+        cocok.forEach(t => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = t.nama;
+          b.onclick = () => { document.getElementById('f-nama').value = t.nama; tampilSaranToko(); };
+          box.appendChild(b);
+        });
+        box.classList.remove('hidden');
+      }
+
       async function simpanForm() {
         const nama = document.getElementById('f-nama').value.trim();
         const jumlah = parseInt(document.getElementById('f-jumlah').value.replace(/[^0-9]/g, ''), 10) || 0;
         if (!nama || jumlah <= 0) return tampilAlert('warning', 'Data Belum Lengkap', 'Isi nama dan jumlah terlebih dahulu.');
 
-        const toko = tokoAktif.find(t => kunci(t.nama) === kunci(nama));
+        const toko = tokoDariNama(nama);
+        if (!toko && !document.getElementById('f-bukan-toko').checked) {
+          tampilSaranToko();
+          return tampilAlert('warning', 'Pilih Toko', 'Nama belum cocok dengan toko mana pun. Pilih toko dari saran/daftar, atau centang "Bukan toko" kalau ini pembeli perorangan.');
+        }
         const btn = document.getElementById('f-simpan');
         tampilLoadingTombol(btn);
         try {
